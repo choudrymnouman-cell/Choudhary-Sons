@@ -5,8 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.auth import get_current_user, require_roles
-from app.db.session import get_db
+from app.api.deps import get_current_user, get_db, require_roles
 from app.models.commercial import ClientInvoice, Expense, PurchaseOrder
 from app.models.core import Attendance, Employee, Project, ProjectStatus, User, UserRole
 from app.models.field_ops import (
