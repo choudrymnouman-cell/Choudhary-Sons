@@ -16,7 +16,7 @@ def test_health():
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
-    assert payload["version"] == "0.6.0"
+    assert payload["version"] == "0.7.0"
 
 
 def test_root_reports_current_version():
@@ -24,7 +24,7 @@ def test_root_reports_current_version():
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "running"
-    assert payload["version"] == "0.6.0"
+    assert payload["version"] == "0.7.0"
 
 
 def test_protected_endpoint_requires_authentication():
