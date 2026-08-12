@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -49,8 +50,7 @@ class ApiService {
   Future<Map<String, dynamic>> createJob(String token, Map<String, dynamic> body) => _postJson('/api/v1/jobs', token, body);
   Future<Map<String, dynamic>> updateProject(String token, int id, Map<String, dynamic> body) => _patchJson('/api/v1/projects/$id', token, body);
   Future<Map<String, dynamic>> updateEmployee(String token, int id, Map<String, dynamic> body) => _patchJson('/api/v1/employees/$id', token, body);
-  Future<Map<String, dynamic>> deactivateEmployee(String token, int id) => _patchJson('/api/v1/employees/$id/deactivate', token, const {});
-  Future<Map<String, dynamic>> closeJob(String token, int id) => _patchJson('/api/v1/jobs/$id/close', token, const {});
+  Future<void> deactivateEmployee(String token, int id) => _patch('/api/v1/employees/$id/deactivate', token);
 
   Future<void> checkIn(String token) => _attendanceAction(token, 'check-in');
   Future<void> checkOut(String token) => _attendanceAction(token, 'check-out');
@@ -80,6 +80,40 @@ class ApiService {
   Future<List<dynamic>> siteReports(String token) => _getList('/api/v1/site-reports', token);
   Future<List<dynamic>> safetyIncidents(String token) => _getList('/api/v1/safety/incidents', token);
   Future<List<dynamic>> notices(String token) => _getList('/api/v1/notices', token);
+  Future<List<dynamic>> documents(String token, {int? projectId, int? employeeId}) {
+    final params = <String, String>{};
+    if (projectId != null) params['project_id'] = '$projectId';
+    if (employeeId != null) params['employee_id'] = '$employeeId';
+    final suffix = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
+    return _getList('/api/v1/documents$suffix', token);
+  }
+
+  Future<Map<String, dynamic>> uploadDocument({
+    required String token,
+    required String title,
+    required String documentType,
+    required String fileName,
+    required Uint8List bytes,
+    int? projectId,
+    int? employeeId,
+    String? expiryDate,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/v1/documents'));
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['title'] = title;
+    request.fields['document_type'] = documentType;
+    if (projectId != null) request.fields['project_id'] = '$projectId';
+    if (employeeId != null) request.fields['employee_id'] = '$employeeId';
+    if (expiryDate != null && expiryDate.isNotEmpty) request.fields['expiry_date'] = expiryDate;
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final payload = jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Upload failed' : 'Upload failed');
+    }
+    return payload as Map<String, dynamic>;
+  }
 
   Future<Map<String, dynamic>> createAsset(String token, Map<String, dynamic> body) => _postJson('/api/v1/assets', token, body);
   Future<Map<String, dynamic>> createFuelLog(String token, Map<String, dynamic> body) => _postJson('/api/v1/assets/fuel', token, body);
@@ -122,9 +156,9 @@ class ApiService {
 
   Future<Map<String, dynamic>> _patchJson(String path, String token, Map<String, dynamic> body) async {
     final response = await http.patch(Uri.parse('$baseUrl$path'), headers: _authHeaders(token), body: jsonEncode(body));
-    final payload = response.body.isEmpty ? <String, dynamic>{} : jsonDecode(response.body);
+    final payload = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Request failed' : 'Request failed');
-    return payload is Map<String, dynamic> ? payload : <String, dynamic>{};
+    return payload as Map<String, dynamic>;
   }
 
   Future<void> _patch(String path, String token) async {
