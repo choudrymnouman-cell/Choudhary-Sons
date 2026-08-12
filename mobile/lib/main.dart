@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'screens/commercial_dashboard.dart';
+import 'screens/employee_portal_screens.dart';
 import 'screens/field_operations_screen.dart';
+import 'screens/management_lists.dart';
 import 'services/api_service.dart';
 
 void main() {
@@ -16,10 +18,7 @@ class ChoudharySonsApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Choudhary & Sons',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.indigo,
-      ),
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
       home: const LoginScreen(),
     );
   }
@@ -51,22 +50,13 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _error = 'Enter your email and password.');
       return;
     }
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
       final session = await _api.login(_emailController.text, _passwordController.text);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => session.isManagement
-              ? ManagementDashboard(session: session)
-              : EmployeeDashboard(session: session),
-        ),
-      );
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => session.isManagement ? ManagementDashboard(session: session) : EmployeeDashboard(session: session),
+      ));
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -86,45 +76,20 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(Icons.engineering, size: 54),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Choudhary & Sons',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Company Management Portal', textAlign: TextAlign.center),
-                      const SizedBox(height: 28),
-                      TextField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: true,
-                        onSubmitted: (_) => _login(),
-                        decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      ],
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: _loading ? null : _login,
-                        icon: _loading
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.login),
-                        label: Text(_loading ? 'Signing in...' : 'Sign In'),
-                      ),
-                    ],
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Icon(Icons.engineering, size: 54),
+                    const SizedBox(height: 14),
+                    Text('Choudhary & Sons', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    const Text('Company Management Portal', textAlign: TextAlign.center),
+                    const SizedBox(height: 28),
+                    TextField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
+                    const SizedBox(height: 14),
+                    TextField(controller: _passwordController, obscureText: true, onSubmitted: (_) => _login(), decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder())),
+                    if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))],
+                    const SizedBox(height: 20),
+                    FilledButton.icon(onPressed: _loading ? null : _login, icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login), label: Text(_loading ? 'Signing in...' : 'Sign In')),
+                  ]),
                 ),
               ),
             ),
@@ -154,11 +119,18 @@ class ManagementDashboard extends StatelessWidget {
       (icon: Icons.health_and_safety_outlined, title: 'Safety', subtitle: 'Incidents & inspections'),
     ];
 
+    void openModule(String title) {
+      if (const {'Procurement', 'Inventory', 'Finance'}.contains(title)) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)));
+      } else if (const {'Assets', 'Safety'}.contains(title)) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: session)));
+      } else {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ManagementListScreen(session: session, type: title)));
+      }
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Choudhary & Sons'),
-        actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none))],
-      ),
+      appBar: AppBar(title: const Text('Choudhary & Sons'), actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none))]),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -170,40 +142,22 @@ class ManagementDashboard extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: modules.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.05,
-            ),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.05),
             itemBuilder: (context, index) {
               final module = modules[index];
-              final isCommercial = const {'Procurement', 'Inventory', 'Finance'}.contains(module.title);
-              final isFieldOps = const {'Assets', 'Safety'}.contains(module.title);
               return Card(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: isCommercial
-                      ? () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)),
-                          )
-                      : isFieldOps
-                          ? () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: session)),
-                              )
-                          : null,
+                  onTap: () => openModule(module.title),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(module.icon, size: 30),
-                        const Spacer(),
-                        Text(module.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Text(module.subtitle, style: Theme.of(context).textTheme.bodySmall),
-                      ],
-                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Icon(module.icon, size: 30),
+                      const Spacer(),
+                      Text(module.title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(module.subtitle, style: Theme.of(context).textTheme.bodySmall),
+                    ]),
                   ),
                 ),
               );
@@ -230,22 +184,10 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
   Future<void> _attendanceAction(bool checkIn) async {
     setState(() => _busy = true);
     try {
-      if (checkIn) {
-        await _api.checkIn(widget.session.token);
-      } else {
-        await _api.checkOut(widget.session.token);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(checkIn ? 'Checked in successfully' : 'Checked out successfully')),
-        );
-      }
+      checkIn ? await _api.checkIn(widget.session.token) : await _api.checkOut(widget.session.token);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(checkIn ? 'Checked in successfully' : 'Checked out successfully')));
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -253,6 +195,15 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final menu = <({IconData icon, String title, String subtitle})>[
+      (icon: Icons.person_outline, title: 'My Profile', subtitle: 'Personal and employment details'),
+      (icon: Icons.calendar_month_outlined, title: 'Attendance History', subtitle: 'View check-in and check-out records'),
+      (icon: Icons.payments_outlined, title: 'Salary & Payslips', subtitle: 'Salary, deductions and advances'),
+      (icon: Icons.event_busy_outlined, title: 'Leave Requests', subtitle: 'Apply and track leave'),
+      (icon: Icons.work_outline, title: 'Open Jobs', subtitle: 'View internal and public vacancies'),
+      (icon: Icons.campaign_outlined, title: 'Notices', subtitle: 'Company announcements and updates'),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Employee Portal')),
       body: ListView(
@@ -265,54 +216,26 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Attendance', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: _busy ? null : () => _attendanceAction(true),
-                    icon: const Icon(Icons.login),
-                    label: const Text('Check In'),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : () => _attendanceAction(false),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Check Out'),
-                  ),
-                ],
-              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('Attendance', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 14),
+                FilledButton.icon(onPressed: _busy ? null : () => _attendanceAction(true), icon: const Icon(Icons.login), label: const Text('Check In')),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(onPressed: _busy ? null : () => _attendanceAction(false), icon: const Icon(Icons.logout), label: const Text('Check Out')),
+              ]),
             ),
           ),
           const SizedBox(height: 12),
-          const _EmployeeMenuTile(icon: Icons.person_outline, title: 'My Profile', subtitle: 'Personal and employment details'),
-          const _EmployeeMenuTile(icon: Icons.calendar_month_outlined, title: 'Attendance History', subtitle: 'View check-in and check-out records'),
-          const _EmployeeMenuTile(icon: Icons.payments_outlined, title: 'Salary & Payslips', subtitle: 'Salary, deductions and advances'),
-          const _EmployeeMenuTile(icon: Icons.event_busy_outlined, title: 'Leave Requests', subtitle: 'Apply and track leave'),
-          const _EmployeeMenuTile(icon: Icons.work_outline, title: 'Open Jobs', subtitle: 'View internal and public vacancies'),
-          const _EmployeeMenuTile(icon: Icons.campaign_outlined, title: 'Notices', subtitle: 'Company announcements and updates'),
+          ...menu.map((item) => Card(
+                child: ListTile(
+                  leading: Icon(item.icon),
+                  title: Text(item.title),
+                  subtitle: Text(item.subtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmployeeDataScreen(session: widget.session, type: item.title))),
+                ),
+              )),
         ],
-      ),
-    );
-  }
-}
-
-class _EmployeeMenuTile extends StatelessWidget {
-  const _EmployeeMenuTile({required this.icon, required this.title, required this.subtitle});
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {},
       ),
     );
   }
