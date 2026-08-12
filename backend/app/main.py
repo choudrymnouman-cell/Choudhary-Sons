@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import attendance, auth, commercial, employees, field_ops, operations
@@ -21,8 +22,16 @@ upload_dir.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.0",
+    version="0.8.0",
     description="Backend API for Choudhary & Sons contractor and supplier management platform.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
@@ -40,14 +49,14 @@ def root():
     return {
         "name": settings.app_name,
         "status": "running",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "environment": settings.environment,
     }
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "0.7.0"}
+    return {"status": "ok", "version": "0.8.0"}
 
 
 @app.get("/api/v1/modules")
@@ -78,5 +87,6 @@ def modules():
             "notices",
             "dashboard_kpis",
             "reports",
+            "web",
         ]
     }
