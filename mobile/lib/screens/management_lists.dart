@@ -53,6 +53,7 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
       if (item['code'] != null) 'Code: ${item['code']}',
       if (item['designation'] != null) item['designation'].toString(),
       if (item['department'] != null) item['department'].toString(),
+      if (item['is_active'] != null) item['is_active'] == true ? 'Active' : 'Inactive',
       if (item['date'] != null) 'Date: ${item['date']}',
       if (item['start_date'] != null) '${item['start_date']} → ${item['end_date'] ?? ''}',
       if (item['status'] != null) 'Status: ${item['status']}',
@@ -84,7 +85,37 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
     }
   }
 
+  Future<void> _edit(Map<String, dynamic> item) async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => EditRecordScreen(session: widget.session, type: widget.type, record: item),
+    ));
+    if (changed == true) _refresh();
+  }
+
+  Future<void> _deactivateEmployee(Map<String, dynamic> item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Deactivate employee?'),
+        content: Text('${item['full_name'] ?? item['employee_code']} will no longer be able to sign in. Attendance and payroll history will be kept.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Deactivate')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.deactivateEmployee(widget.session.token, item['id'] as int);
+      _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Employee deactivated')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
+
   bool get _canAdd => const {'Projects', 'Employees', 'Payroll', 'Recruitment'}.contains(widget.type);
+  bool get _canEdit => const {'Projects', 'Employees'}.contains(widget.type);
 
   @override
   Widget build(BuildContext context) {
@@ -134,6 +165,7 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
                     itemBuilder: (context, index) {
                       final item = rows[index];
                       final pendingLeave = widget.type == 'Leave' && item['status'].toString().toLowerCase().contains('pending');
+                      final employeeActive = item['is_active'] != false;
                       return Card(
                         child: Column(
                           children: [
@@ -141,7 +173,19 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
                               leading: CircleAvatar(child: Text(_title(item).isEmpty ? '?' : _title(item)[0].toUpperCase())),
                               title: Text(_title(item)),
                               subtitle: Text(_subtitle(item)),
-                              trailing: const Icon(Icons.chevron_right),
+                              trailing: _canEdit
+                                  ? PopupMenuButton<String>(
+                                      onSelected: (action) {
+                                        if (action == 'edit') _edit(item);
+                                        if (action == 'deactivate') _deactivateEmployee(item);
+                                      },
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit'), contentPadding: EdgeInsets.zero)),
+                                        if (widget.type == 'Employees' && employeeActive)
+                                          const PopupMenuItem(value: 'deactivate', child: ListTile(leading: Icon(Icons.person_off_outlined), title: Text('Deactivate'), contentPadding: EdgeInsets.zero)),
+                                      ],
+                                    )
+                                  : const Icon(Icons.chevron_right),
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => RecordDetailScreen(title: _title(item), record: item)),
                               ),
@@ -165,6 +209,130 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class EditRecordScreen extends StatefulWidget {
+  const EditRecordScreen({super.key, required this.session, required this.type, required this.record});
+  final AuthSession session;
+  final String type;
+  final Map<String, dynamic> record;
+
+  @override
+  State<EditRecordScreen> createState() => _EditRecordScreenState();
+}
+
+class _EditRecordScreenState extends State<EditRecordScreen> {
+  final _api = ApiService();
+  final _formKey = GlobalKey<FormState>();
+  final Map<String, TextEditingController> _controllers = {};
+  bool _saving = false;
+  String? _projectStatus;
+
+  TextEditingController _controller(String key) => _controllers.putIfAbsent(key, () => TextEditingController(text: '${widget.record[key] ?? ''}'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.type == 'Projects') _projectStatus = widget.record['status']?.toString();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Widget _field(String key, String label, {bool number = false, int lines = 1}) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextFormField(
+          controller: _controller(key),
+          keyboardType: number ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+          maxLines: lines,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        ),
+      );
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final id = widget.record['id'] as int;
+      if (widget.type == 'Projects') {
+        await _api.updateProject(widget.session.token, id, {
+          'name': _controller('name').text.trim(),
+          'description': _controller('description').text.trim().isEmpty ? null : _controller('description').text.trim(),
+          'site_address': _controller('site_address').text.trim().isEmpty ? null : _controller('site_address').text.trim(),
+          'contract_value': double.tryParse(_controller('contract_value').text.trim()),
+          'start_date': _controller('start_date').text.trim().isEmpty ? null : _controller('start_date').text.trim(),
+          'end_date': _controller('end_date').text.trim().isEmpty ? null : _controller('end_date').text.trim(),
+          'status': _projectStatus,
+        });
+      } else if (widget.type == 'Employees') {
+        await _api.updateEmployee(widget.session.token, id, {
+          'full_name': _controller('full_name').text.trim(),
+          'phone': _controller('phone').text.trim().isEmpty ? null : _controller('phone').text.trim(),
+          'designation': _controller('designation').text.trim(),
+          'department': _controller('department').text.trim().isEmpty ? null : _controller('department').text.trim(),
+          'basic_salary': double.tryParse(_controller('basic_salary').text.trim()),
+          'cnic': _controller('cnic').text.trim().isEmpty ? null : _controller('cnic').text.trim(),
+          'emergency_contact': _controller('emergency_contact').text.trim().isEmpty ? null : _controller('emergency_contact').text.trim(),
+          'address': _controller('address').text.trim().isEmpty ? null : _controller('address').text.trim(),
+        });
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Changes saved')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final project = widget.type == 'Projects';
+    return Scaffold(
+      appBar: AppBar(title: Text('Edit ${project ? 'Project' : 'Employee'}')),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: project
+              ? [
+                  _field('name', 'Project name'),
+                  _field('description', 'Description', lines: 3),
+                  _field('site_address', 'Site address', lines: 2),
+                  _field('contract_value', 'Contract value', number: true),
+                  _field('start_date', 'Start date (YYYY-MM-DD)'),
+                  _field('end_date', 'End date (YYYY-MM-DD)'),
+                  DropdownButtonFormField<String>(
+                    initialValue: _projectStatus,
+                    decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
+                    items: const ['planned', 'active', 'on_hold', 'completed', 'cancelled'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    onChanged: (v) => _projectStatus = v,
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(onPressed: _saving ? null : _save, icon: const Icon(Icons.save_outlined), label: Text(_saving ? 'Saving...' : 'Save changes')),
+                ]
+              : [
+                  _field('full_name', 'Full name'),
+                  _field('phone', 'Phone'),
+                  _field('designation', 'Designation'),
+                  _field('department', 'Department'),
+                  _field('basic_salary', 'Basic salary', number: true),
+                  _field('cnic', 'CNIC'),
+                  _field('emergency_contact', 'Emergency contact'),
+                  _field('address', 'Address', lines: 3),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(onPressed: _saving ? null : _save, icon: const Icon(Icons.save_outlined), label: Text(_saving ? 'Saving...' : 'Save changes')),
+                ],
+        ),
       ),
     );
   }
