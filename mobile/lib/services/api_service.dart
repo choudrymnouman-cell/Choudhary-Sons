@@ -88,6 +88,9 @@ class ApiService {
     return _getList('/api/v1/documents$suffix', token);
   }
 
+  Future<Map<String, dynamic>> documentDownloadUrl(String token, int documentId) =>
+      _getMap('/api/v1/documents/$documentId/download-url', token);
+
   Future<Map<String, dynamic>> uploadDocument({
     required String token,
     required String title,
@@ -98,7 +101,7 @@ class ApiService {
     int? employeeId,
     String? expiryDate,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/v1/documents'));
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/v1/documents/supabase'));
     request.headers['Authorization'] = 'Bearer $token';
     request.fields['title'] = title;
     request.fields['document_type'] = documentType;
