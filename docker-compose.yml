@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: choudhary_sons
+      POSTGRES_USER: choudhary
+      POSTGRES_PASSWORD: choudhary_dev_password
+    volumes:
+      - choudhary_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U choudhary -d choudhary_sons"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_NAME: Choudhary & Sons API
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://choudhary:choudhary_dev_password@db:5432/choudhary_sons
+      SECRET_KEY: local-dev-only-change-before-deployment
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  choudhary_pgdata:
