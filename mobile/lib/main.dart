@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/commercial_dashboard.dart';
+import 'screens/field_operations_screen.dart';
 import 'services/api_service.dart';
 
 void main() {
@@ -178,6 +179,7 @@ class ManagementDashboard extends StatelessWidget {
             itemBuilder: (context, index) {
               final module = modules[index];
               final isCommercial = const {'Procurement', 'Inventory', 'Finance'}.contains(module.title);
+              final isFieldOps = const {'Assets', 'Safety'}.contains(module.title);
               return Card(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -185,7 +187,11 @@ class ManagementDashboard extends StatelessWidget {
                       ? () => Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)),
                           )
-                      : null,
+                      : isFieldOps
+                          ? () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: session)),
+                              )
+                          : null,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
