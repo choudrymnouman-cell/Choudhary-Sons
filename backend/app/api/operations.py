@@ -20,6 +20,16 @@ class ProjectCreate(BaseModel):
     contract_value: float = 0
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    site_address: str | None = None
+    contract_value: float | None = None
+    status: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return db.query(Project).order_by(Project.id.desc()).all()
@@ -31,6 +41,21 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
         raise HTTPException(status_code=409, detail="Project code already exists")
     project = Project(**payload.model_dump())
     db.add(project)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.patch("/projects/{project_id}")
+def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("end_date") and data.get("start_date") and data["end_date"] < data["start_date"]:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    for key, value in data.items():
+        setattr(project, key, value)
     db.commit()
     db.refresh(project)
     return project
@@ -55,6 +80,17 @@ def public_jobs(db: Session = Depends(get_db)):
 def create_job(payload: VacancyCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR))):
     job = JobVacancy(**payload.model_dump())
     db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@router.patch("/jobs/{job_id}/close")
+def close_job(job_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR))):
+    job = db.get(JobVacancy, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    job.is_open = False
     db.commit()
     db.refresh(job)
     return job
