@@ -101,7 +101,7 @@ def request_leave(payload: LeaveCreate, db: Session = Depends(get_db), user: Use
         raise HTTPException(status_code=400, detail="Employee profile required")
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
-    leave = LeaveRequest(employee_id=employee.id, leave_type=payload.leave_type, start_date=payload.start_date, end_date=payload.end_date, reason=payload.reason)
+    leave = LeaveRequest(employee_id=employee.id, **payload.model_dump())
     db.add(leave)
     db.commit()
     db.refresh(leave)
@@ -134,6 +134,33 @@ def review_leave(leave_id: int, decision: str, db: Session = Depends(get_db), us
     db.commit()
     db.refresh(leave)
     return leave
+
+
+class PayrollCreate(BaseModel):
+    employee_id: int
+    period: str
+    basic_salary: float
+    overtime: float = 0
+    allowances: float = 0
+    deductions: float = 0
+    advances: float = 0
+    payment_status: str = "pending"
+    notes: str | None = None
+
+
+@router.post("/payroll")
+def create_payroll(payload: PayrollCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.ACCOUNTANT))):
+    if not db.get(Employee, payload.employee_id):
+        raise HTTPException(status_code=404, detail="Employee not found")
+    existing = db.query(PayrollRecord).filter(PayrollRecord.employee_id == payload.employee_id, PayrollRecord.period == payload.period).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Payroll already exists for this employee and period")
+    net_salary = payload.basic_salary + payload.overtime + payload.allowances - payload.deductions - payload.advances
+    record = PayrollRecord(**payload.model_dump(), net_salary=net_salary)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 @router.get("/payroll/me")
