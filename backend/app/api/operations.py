@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -89,8 +89,8 @@ def applications(db: Session = Depends(get_db), _: User = Depends(require_roles(
 
 class LeaveCreate(BaseModel):
     leave_type: str = "annual"
-    start_date: str
-    end_date: str
+    start_date: date
+    end_date: date
     reason: str | None = None
 
 
@@ -99,6 +99,8 @@ def request_leave(payload: LeaveCreate, db: Session = Depends(get_db), user: Use
     employee = db.query(Employee).filter(Employee.user_id == user.id).first()
     if not employee:
         raise HTTPException(status_code=400, detail="Employee profile required")
+    if payload.end_date < payload.start_date:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date")
     leave = LeaveRequest(employee_id=employee.id, leave_type=payload.leave_type, start_date=payload.start_date, end_date=payload.end_date, reason=payload.reason)
     db.add(leave)
     db.commit()
