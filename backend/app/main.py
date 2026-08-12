@@ -8,11 +8,14 @@ from app.models import field_ops as field_ops_models  # noqa: F401
 from app.models import core, operations as operations_models  # noqa: F401
 
 
-Base.metadata.create_all(bind=engine)
+# Local development can bootstrap an empty SQLite database automatically.
+# Production environments should run Alembic migrations before starting Uvicorn.
+if settings.environment.lower() == "development":
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     description="Backend API for Choudhary & Sons contractor and supplier management platform.",
 )
 
@@ -29,13 +32,14 @@ def root():
     return {
         "name": settings.app_name,
         "status": "running",
-        "version": "0.5.0",
+        "version": "0.6.0",
+        "environment": settings.environment,
     }
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.6.0"}
 
 
 @app.get("/api/v1/modules")
