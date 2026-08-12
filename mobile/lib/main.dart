@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'screens/commercial_dashboard.dart';
+import 'screens/documents_screen.dart';
 import 'screens/employee_portal_screens.dart';
 import 'screens/field_operations_screen.dart';
 import 'screens/management_lists.dart';
@@ -106,7 +107,8 @@ class ManagementDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final modules = <({IconData icon, String title, String subtitle})>[
       (icon: Icons.engineering_outlined, title: 'Projects', subtitle: 'Contracts, sites & progress'),
-      (icon: Icons.groups_outlined, title: 'Employees', subtitle: 'Staff, roles & documents'),
+      (icon: Icons.groups_outlined, title: 'Employees', subtitle: 'Staff, roles & records'),
+      (icon: Icons.folder_copy_outlined, title: 'Documents', subtitle: 'Contracts, CNICs, invoices & files'),
       (icon: Icons.fact_check_outlined, title: 'Attendance', subtitle: 'Daily attendance & overtime'),
       (icon: Icons.event_available_outlined, title: 'Leave', subtitle: 'Review and approve leave requests'),
       (icon: Icons.payments_outlined, title: 'Payroll', subtitle: 'Salary, advances & deductions'),
@@ -119,7 +121,9 @@ class ManagementDashboard extends StatelessWidget {
     ];
 
     void openModule(String title) {
-      if (const {'Procurement', 'Inventory', 'Finance'}.contains(title)) {
+      if (title == 'Documents') {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => DocumentsScreen(session: session)));
+      } else if (const {'Procurement', 'Inventory', 'Finance'}.contains(title)) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)));
       } else if (const {'Assets', 'Safety'}.contains(title)) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: session)));
