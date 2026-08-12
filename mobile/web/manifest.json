@@ -1,0 +1,11 @@
+{
+  "name": "Choudhary & Sons",
+  "short_name": "Choudhary & Sons",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3f51b5",
+  "description": "Contractor and supplier management platform for Choudhary & Sons.",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}
