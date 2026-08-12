@@ -1,11 +1,14 @@
 from datetime import date
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.core.config import settings
 from app.models.commercial import ClientInvoice, Expense, PurchaseOrder
 from app.models.core import Attendance, Employee, Project, ProjectStatus, User, UserRole
 from app.models.field_ops import (
@@ -31,6 +34,8 @@ MANAGEMENT = [
     UserRole.SITE_SUPERVISOR,
 ]
 FIELD_MANAGEMENT = [UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR]
+DOCUMENT_MANAGEMENT = [UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.ACCOUNTANT, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR]
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".doc", ".docx", ".xls", ".xlsx"}
 
 
 class AssetCreate(BaseModel):
@@ -190,6 +195,70 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
     db.commit()
     db.refresh(inspection)
     return inspection
+
+
+@router.post("/documents", status_code=201)
+async def upload_document(
+    title: str = Form(...),
+    document_type: str = Form(...),
+    project_id: int | None = Form(None),
+    employee_id: int | None = Form(None),
+    expiry_date: date | None = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+):
+    if project_id is not None and not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    if employee_id is not None and not db.get(Employee, employee_id):
+        raise HTTPException(status_code=404, detail="Employee not found")
+    if project_id is None and employee_id is None:
+        raise HTTPException(status_code=400, detail="Attach the document to a project or employee")
+
+    original_name = Path(file.filename or "upload").name
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    contents = await file.read(max_bytes + 1)
+    if len(contents) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_mb} MB limit")
+
+    upload_dir = Path(settings.upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{uuid4().hex}{extension}"
+    stored_path = upload_dir / stored_name
+    stored_path.write_bytes(contents)
+
+    document = CompanyDocument(
+        project_id=project_id,
+        employee_id=employee_id,
+        title=title.strip(),
+        document_type=document_type.strip(),
+        file_url=f"/uploads/{stored_name}",
+        expiry_date=expiry_date,
+        uploaded_by=user.id,
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@router.get("/documents")
+def list_documents(
+    project_id: int | None = None,
+    employee_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+):
+    query = db.query(CompanyDocument)
+    if project_id is not None:
+        query = query.filter(CompanyDocument.project_id == project_id)
+    if employee_id is not None:
+        query = query.filter(CompanyDocument.employee_id == employee_id)
+    return query.order_by(CompanyDocument.created_at.desc()).all()
 
 
 @router.post("/notices")
