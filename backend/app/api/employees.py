@@ -28,6 +28,18 @@ class EmployeeCreate(BaseModel):
     role: UserRole = UserRole.EMPLOYEE
 
 
+class EmployeeUpdate(BaseModel):
+    full_name: str | None = None
+    phone: str | None = None
+    designation: str | None = None
+    department: str | None = None
+    basic_salary: float | None = None
+    cnic: str | None = None
+    emergency_contact: str | None = None
+    address: str | None = None
+    role: UserRole | None = None
+
+
 @router.get("")
 def list_employees(
     db: Session = Depends(get_db),
@@ -46,6 +58,7 @@ def list_employees(
             "joining_date": e.joining_date,
             "basic_salary": float(e.basic_salary),
             "role": e.user.role.value,
+            "is_active": e.user.is_active,
         }
         for e in employees
     ]
@@ -87,6 +100,41 @@ def create_employee(
     db.commit()
     db.refresh(employee)
     return {"id": employee.id, "employee_code": employee.employee_code, "message": "Employee created"}
+
+
+@router.patch("/{employee_id}")
+def update_employee(
+    employee_id: int,
+    payload: EmployeeUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    data = payload.model_dump(exclude_unset=True)
+    for key in ("full_name", "phone", "role"):
+        if key in data:
+            setattr(employee.user, key, data.pop(key))
+    for key, value in data.items():
+        setattr(employee, key, value)
+    db.commit()
+    db.refresh(employee)
+    return {"id": employee.id, "employee_code": employee.employee_code, "message": "Employee updated"}
+
+
+@router.patch("/{employee_id}/deactivate")
+def deactivate_employee(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    employee.user.is_active = False
+    db.commit()
+    return {"id": employee.id, "message": "Employee deactivated"}
 
 
 @router.get("/me")
