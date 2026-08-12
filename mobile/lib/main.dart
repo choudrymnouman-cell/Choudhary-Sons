@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/commercial_dashboard.dart';
 import 'services/api_service.dart';
 
 void main() {
@@ -176,10 +177,15 @@ class ManagementDashboard extends StatelessWidget {
             ),
             itemBuilder: (context, index) {
               final module = modules[index];
+              final isCommercial = const {'Procurement', 'Inventory', 'Finance'}.contains(module.title);
               return Card(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: () {},
+                  onTap: isCommercial
+                      ? () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)),
+                          )
+                      : null,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
