@@ -77,7 +77,6 @@ class ApiService {
   }
 
   Future<void> checkIn(String token) => _attendanceAction(token, 'check-in');
-
   Future<void> checkOut(String token) => _attendanceAction(token, 'check-out');
 
   Future<void> _attendanceAction(String token, String action) async {
@@ -97,17 +96,16 @@ class ApiService {
   Future<List<dynamic>> purchaseOrders(String token) => _getList('/api/v1/commercial/purchase-orders', token);
   Future<List<dynamic>> expenses(String token) => _getList('/api/v1/commercial/expenses', token);
   Future<List<dynamic>> invoices(String token) => _getList('/api/v1/commercial/invoices', token);
+  Future<List<dynamic>> assets(String token) => _getList('/api/v1/assets', token);
+  Future<List<dynamic>> siteReports(String token) => _getList('/api/v1/site-reports', token);
+  Future<List<dynamic>> safetyIncidents(String token) => _getList('/api/v1/safety/incidents', token);
+  Future<List<dynamic>> notices(String token) => _getList('/api/v1/notices', token);
 
-  Future<Map<String, dynamic>> projectProfitability(String token, int projectId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/v1/commercial/projects/$projectId/profitability'),
-      headers: _authHeaders(token),
-    );
-    final payload = jsonDecode(response.body);
-    if (response.statusCode != 200) {
-      throw Exception(payload['detail'] ?? 'Unable to load profitability');
-    }
-    return payload as Map<String, dynamic>;
+  Future<Map<String, dynamic>> dashboardKpis(String token) => _getMap('/api/v1/dashboard/kpis', token);
+  Future<Map<String, dynamic>> assetCostSummary(String token) => _getMap('/api/v1/assets/cost-summary', token);
+
+  Future<Map<String, dynamic>> projectProfitability(String token, int projectId) {
+    return _getMap('/api/v1/commercial/projects/$projectId/profitability', token);
   }
 
   Future<List<dynamic>> _getList(String path, String token) async {
@@ -117,5 +115,14 @@ class ApiService {
       throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Request failed' : 'Request failed');
     }
     return payload as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> _getMap(String path, String token) async {
+    final response = await http.get(Uri.parse('$baseUrl$path'), headers: _authHeaders(token));
+    final payload = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Request failed' : 'Request failed');
+    }
+    return payload as Map<String, dynamic>;
   }
 }
