@@ -25,7 +25,7 @@ class ApiService {
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode != 200) throw Exception(payload['detail'] ?? 'Login failed');
     final user = payload['user'] as Map<String, dynamic>;
-    return AuthSession(token: payload['access_token'] as String, userId: user['id'] as int, fullName: user['full_name'] as String, email: user['email'] as String, role: user['role'] as String);
+    return AuthSession(token: payload['access_token'], userId: user['id'], fullName: user['full_name'], email: user['email'], role: user['role']);
   }
 
   Future<Map<String, dynamic>> myEmployeeProfile(String token) => _getMap('/api/v1/employees/me', token);
@@ -40,27 +40,13 @@ class ApiService {
   Future<List<dynamic>> myLeave(String token) => _getList('/api/v1/leave/me', token);
   Future<List<dynamic>> leaveRequests(String token) => _getList('/api/v1/leave', token);
 
+  Future<void> requestLeave({required String token, required String leaveType, required String startDate, required String endDate, String? reason}) => _postJson('/api/v1/leave', token, {'leave_type': leaveType, 'start_date': startDate, 'end_date': endDate, 'reason': reason});
+  Future<void> reviewLeave(String token, int id, String decision) async => _patch('/api/v1/leave/$id/$decision', token);
+
   Future<Map<String, dynamic>> createProject(String token, Map<String, dynamic> body) => _postJson('/api/v1/projects', token, body);
   Future<Map<String, dynamic>> createEmployee(String token, Map<String, dynamic> body) => _postJson('/api/v1/employees', token, body);
-  Future<Map<String, dynamic>> createJob(String token, Map<String, dynamic> body) => _postJson('/api/v1/jobs', token, body);
   Future<Map<String, dynamic>> createPayroll(String token, Map<String, dynamic> body) => _postJson('/api/v1/payroll', token, body);
-  Future<Map<String, dynamic>> createSupplier(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/suppliers', token, body);
-  Future<Map<String, dynamic>> createMaterial(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/materials', token, body);
-  Future<Map<String, dynamic>> createPurchaseOrder(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/purchase-orders', token, body);
-  Future<Map<String, dynamic>> createExpense(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/expenses', token, body);
-  Future<Map<String, dynamic>> createInvoice(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/invoices', token, body);
-
-  Future<void> reviewLeave(String token, int leaveId, String decision) async {
-    final response = await http.patch(Uri.parse('$baseUrl/api/v1/leave/$leaveId/$decision'), headers: _authHeaders(token));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final payload = jsonDecode(response.body);
-      throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Unable to review leave' : 'Unable to review leave');
-    }
-  }
-
-  Future<void> requestLeave({required String token, required String leaveType, required String startDate, required String endDate, String? reason}) async {
-    await _postJson('/api/v1/leave', token, {'leave_type': leaveType, 'start_date': startDate, 'end_date': endDate, 'reason': reason});
-  }
+  Future<Map<String, dynamic>> createJob(String token, Map<String, dynamic> body) => _postJson('/api/v1/jobs', token, body);
 
   Future<void> checkIn(String token) => _attendanceAction(token, 'check-in');
   Future<void> checkOut(String token) => _attendanceAction(token, 'check-out');
@@ -79,10 +65,24 @@ class ApiService {
   Future<List<dynamic>> purchaseOrders(String token) => _getList('/api/v1/commercial/purchase-orders', token);
   Future<List<dynamic>> expenses(String token) => _getList('/api/v1/commercial/expenses', token);
   Future<List<dynamic>> invoices(String token) => _getList('/api/v1/commercial/invoices', token);
+
+  Future<Map<String, dynamic>> createSupplier(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/suppliers', token, body);
+  Future<Map<String, dynamic>> createMaterial(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/materials', token, body);
+  Future<Map<String, dynamic>> createPurchaseOrder(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/purchase-orders', token, body);
+  Future<Map<String, dynamic>> createExpense(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/expenses', token, body);
+  Future<Map<String, dynamic>> createInvoice(String token, Map<String, dynamic> body) => _postJson('/api/v1/commercial/invoices', token, body);
+
   Future<List<dynamic>> assets(String token) => _getList('/api/v1/assets', token);
   Future<List<dynamic>> siteReports(String token) => _getList('/api/v1/site-reports', token);
   Future<List<dynamic>> safetyIncidents(String token) => _getList('/api/v1/safety/incidents', token);
   Future<List<dynamic>> notices(String token) => _getList('/api/v1/notices', token);
+
+  Future<Map<String, dynamic>> createAsset(String token, Map<String, dynamic> body) => _postJson('/api/v1/assets', token, body);
+  Future<Map<String, dynamic>> createFuelLog(String token, Map<String, dynamic> body) => _postJson('/api/v1/assets/fuel', token, body);
+  Future<Map<String, dynamic>> createMaintenance(String token, Map<String, dynamic> body) => _postJson('/api/v1/assets/maintenance', token, body);
+  Future<Map<String, dynamic>> createSiteReport(String token, Map<String, dynamic> body) => _postJson('/api/v1/site-reports', token, body);
+  Future<Map<String, dynamic>> createSafetyIncident(String token, Map<String, dynamic> body) => _postJson('/api/v1/safety/incidents', token, body);
+  Future<Map<String, dynamic>> createNotice(String token, Map<String, dynamic> body) => _postJson('/api/v1/notices', token, body);
 
   Future<Map<String, dynamic>> dashboardKpis(String token) => _getMap('/api/v1/dashboard/kpis', token);
   Future<Map<String, dynamic>> assetCostSummary(String token) => _getMap('/api/v1/assets/cost-summary', token);
@@ -114,5 +114,13 @@ class ApiService {
     final payload = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Request failed' : 'Request failed');
     return payload as Map<String, dynamic>;
+  }
+
+  Future<void> _patch(String path, String token) async {
+    final response = await http.patch(Uri.parse('$baseUrl$path'), headers: _authHeaders(token));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final payload = jsonDecode(response.body);
+      throw Exception(payload is Map<String, dynamic> ? payload['detail'] ?? 'Request failed' : 'Request failed');
+    }
   }
 }
