@@ -1,22 +1,23 @@
 from fastapi import FastAPI
 
-from app.api import attendance, auth, employees
+from app.api import attendance, auth, employees, operations
 from app.core.config import settings
 from app.db.session import Base, engine
-from app.models import core  # noqa: F401
+from app.models import core, operations as operations_models  # noqa: F401
 
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
     description="Backend API for Choudhary & Sons contractor and supplier management platform.",
 )
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
 app.include_router(attendance.router, prefix="/api/v1")
+app.include_router(operations.router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -24,7 +25,7 @@ def root():
     return {
         "name": settings.app_name,
         "status": "running",
-        "version": "0.2.0",
+        "version": "0.3.0",
     }
 
 
@@ -44,6 +45,7 @@ def modules():
             "recruitment",
             "contracts",
             "projects",
+            "leave",
             "boq",
             "suppliers",
             "procurement",
