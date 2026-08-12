@@ -54,9 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final session = await _api.login(_emailController.text, _passwordController.text);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => session.isManagement ? ManagementDashboard(session: session) : EmployeeDashboard(session: session),
-      ));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => session.isManagement ? ManagementDashboard(session: session) : EmployeeDashboard(session: session)));
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -110,6 +108,7 @@ class ManagementDashboard extends StatelessWidget {
       (icon: Icons.engineering_outlined, title: 'Projects', subtitle: 'Contracts, sites & progress'),
       (icon: Icons.groups_outlined, title: 'Employees', subtitle: 'Staff, roles & documents'),
       (icon: Icons.fact_check_outlined, title: 'Attendance', subtitle: 'Daily attendance & overtime'),
+      (icon: Icons.event_available_outlined, title: 'Leave', subtitle: 'Review and approve leave requests'),
       (icon: Icons.payments_outlined, title: 'Payroll', subtitle: 'Salary, advances & deductions'),
       (icon: Icons.shopping_cart_outlined, title: 'Procurement', subtitle: 'Suppliers, POs & materials'),
       (icon: Icons.inventory_2_outlined, title: 'Inventory', subtitle: 'Site stock & consumption'),
