@@ -11,11 +11,7 @@ class ApplicantPortalService {
   }
 
   Future<void> signUp({required String email, required String password, required String fullName, String? phone}) async {
-    final response = await _db.auth.signUp(
-      email: email.trim(),
-      password: password,
-      data: {'full_name': fullName.trim(), 'phone': phone?.trim()},
-    );
+    final response = await _db.auth.signUp(email: email.trim(), password: password, data: {'full_name': fullName.trim(), 'phone': phone?.trim()});
     if (response.user == null) throw Exception('Unable to create account.');
     if (response.session != null) {
       await _db.rpc('register_as_applicant', params: {'p_full_name': fullName.trim(), 'p_phone': phone?.trim()});
@@ -47,9 +43,7 @@ class ApplicantPortalService {
   }
 
   Future<String> signedApplicantFileUrl(String path) => _db.storage.from('applicant-documents').createSignedUrl(path, 600);
-
   Future<List<dynamic>> openJobs() async => List<dynamic>.from(await _db.from('job_vacancies').select().eq('is_open', true).order('created_at', ascending: false));
-
   Future<List<dynamic>> myApplications() async => List<dynamic>.from(await _db.from('job_applications').select('*, job_vacancies(title,department,location,employment_type)').eq('applicant_user_id', _user.id).order('created_at', ascending: false));
 
   Future<void> applyForJob({required int vacancyId, String? coverLetter, double? expectedSalary}) async {
@@ -76,7 +70,13 @@ class ApplicantPortalService {
   Future<List<dynamic>> conversations() async => List<dynamic>.from(await _db.from('hr_conversations').select().order('updated_at', ascending: false));
 
   Future<Map<String, dynamic>> openConversation({int? applicationId, String subject = 'HR Conversation'}) async {
-    final existing = await _db.from('hr_conversations').select().eq('applicant_user_id', _user.id).eq('job_application_id', applicationId).limit(1);
+    var query = _db.from('hr_conversations').select().eq('applicant_user_id', _user.id);
+    if (applicationId == null) {
+      query = query.isFilter('job_application_id', null);
+    } else {
+      query = query.eq('job_application_id', applicationId);
+    }
+    final existing = await query.limit(1);
     if ((existing as List).isNotEmpty) return Map<String, dynamic>.from(existing.first as Map);
     return Map<String, dynamic>.from(await _db.from('hr_conversations').insert({'applicant_user_id': _user.id, 'job_application_id': applicationId, 'subject': subject}).select().single());
   }
