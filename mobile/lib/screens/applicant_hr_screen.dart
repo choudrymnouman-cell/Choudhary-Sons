@@ -53,8 +53,8 @@ class _ApplicantHrScreenState extends State<ApplicantHrScreen> {
       if (!mounted) return;
       setState(() {
         conversation = conv;
-        messages = result[0] as List<dynamic>;
-        interviews = result[1] as List<dynamic>;
+        messages = result[0];
+        interviews = result[1];
       });
     } catch (e) {
       if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
