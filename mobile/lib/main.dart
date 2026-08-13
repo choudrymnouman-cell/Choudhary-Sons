@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/applicant_dashboard.dart';
 import 'screens/commercial_dashboard.dart';
 import 'screens/documents_screen.dart';
 import 'screens/employee_portal_screens.dart';
 import 'screens/field_operations_screen.dart';
 import 'screens/management_lists.dart';
 import 'services/api_service.dart';
+import 'services/applicant_portal_service.dart';
 
 const brandGreen = Color(0xFF0B5A3C);
 const brandGreenDark = Color(0xFF073D2A);
@@ -30,19 +32,10 @@ ThemeData _appTheme() {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: appSurface,
-    appBarTheme: const AppBarTheme(backgroundColor: Colors.white, foregroundColor: brandInk, elevation: 0, centerTitle: false),
-    cardTheme: CardThemeData(
-      color: Colors.white,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: brandGreen.withValues(alpha: .10))),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(minimumSize: const Size(0, 52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-    ),
+    appBarTheme: const AppBarTheme(backgroundColor: Colors.white, foregroundColor: brandInk, elevation: 0),
+    cardTheme: CardThemeData(color: Colors.white, elevation: 0, margin: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: brandGreen.withValues(alpha: .10)))),
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(0, 52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
@@ -51,51 +44,30 @@ ThemeData _appTheme() {
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: brandGreen.withValues(alpha: .16))),
       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: brandGreen, width: 1.5)),
     ),
-    listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 6), minTileHeight: 68, iconColor: brandGreen),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(backgroundColor: brandGreen, foregroundColor: Colors.white),
+    listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 6), minTileHeight: 64, iconColor: brandGreen),
   );
 }
 
 class BrandLogo extends StatelessWidget {
-  const BrandLogo({super.key, this.size = 92});
+  const BrandLogo({super.key, this.size = 76});
   final double size;
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      padding: EdgeInsets.all(size * .08),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
-        border: Border.all(color: brandGreen, width: size * .035),
-        boxShadow: [BoxShadow(color: brandGreen.withValues(alpha: .16), blurRadius: 22, offset: const Offset(0, 8))],
-      ),
-      child: Container(
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: brandGreen),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('C&S', style: TextStyle(color: Colors.white, fontSize: size * .27, fontWeight: FontWeight.w900, letterSpacing: -1)),
-              SizedBox(height: size * .015),
-              Text('KOT ADDU', style: TextStyle(color: Colors.white.withValues(alpha: .9), fontSize: size * .085, fontWeight: FontWeight.w800, letterSpacing: .6)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    padding: EdgeInsets.all(size * .08),
+    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all(color: brandGreen, width: size * .035), boxShadow: [BoxShadow(color: brandGreen.withValues(alpha: .14), blurRadius: 18, offset: const Offset(0, 7))]),
+    child: Container(
+      decoration: const BoxDecoration(shape: BoxShape.circle, color: brandGreen),
+      child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text('C&S', style: TextStyle(color: Colors.white, fontSize: size * .27, fontWeight: FontWeight.w900)), Text('KOT ADDU', style: TextStyle(color: Colors.white70, fontSize: size * .08, fontWeight: FontWeight.w800))])),
+    ),
+  );
 }
 
 class ChoudharySonsApp extends StatelessWidget {
   const ChoudharySonsApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(debugShowCheckedModeBanner: false, title: 'Choudhary & Sons', theme: _appTheme(), home: const LoginScreen());
-  }
+  Widget build(BuildContext context) => MaterialApp(debugShowCheckedModeBanner: false, title: 'Choudhary & Sons', theme: _appTheme(), home: const LoginScreen());
 }
 
 class LoginScreen extends StatefulWidget {
@@ -105,180 +77,227 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _api = ApiService();
-  bool _loading = false;
-  String? _error;
+  final email = TextEditingController();
+  final password = TextEditingController();
+  final api = ApiService();
+  final applicant = ApplicantPortalService();
+  bool applicantMode = false;
+  bool loading = false;
+  String? error;
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
+  void dispose() { email.dispose(); password.dispose(); super.dispose(); }
 
-  Future<void> _login() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
-      return;
-    }
-    setState(() { _loading = true; _error = null; });
+  Future<void> login() async {
+    if (email.text.trim().isEmpty || password.text.isEmpty) { setState(() => error = 'Enter your email and password.'); return; }
+    setState(() { loading = true; error = null; });
     try {
-      final session = await _api.login(_emailController.text, _passwordController.text);
+      final session = await api.login(email.text, password.text);
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => session.isManagement ? ManagementDashboard(session: session) : EmployeeDashboard(session: session)));
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+      if (applicantMode) {
+        await applicant.ensureApplicantRole();
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ApplicantDashboard(session: AuthSession(token: session.token, userId: session.userId, fullName: session.fullName, email: session.email, role: 'applicant'))));
+      } else {
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => session.isManagement ? ManagementDashboard(session: session) : EmployeeDashboard(session: session)));
+      }
+    } catch (e) { if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', '')); }
+    finally { if (mounted) setState(() => loading = false); }
+  }
+
+  Future<void> openSignup() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ApplicantSignupScreen()));
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFF8FBF9), Color(0xFFE8F2ED)]),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(28, 30, 28, 28),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      const Align(alignment: Alignment.center, child: BrandLogo(size: 104)),
-                      const SizedBox(height: 20),
-                      const Text('Choudhary & Sons', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: brandInk, letterSpacing: -.5)),
-                      const SizedBox(height: 6),
-                      const Text('Civil Contractors & Suppliers', textAlign: TextAlign.center, style: TextStyle(color: brandGreen, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text('Company Management Portal', textAlign: TextAlign.center, style: TextStyle(color: brandInk.withValues(alpha: .58))),
-                      const SizedBox(height: 28),
-                      TextField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
-                      const SizedBox(height: 14),
-                      TextField(controller: _passwordController, obscureText: true, onSubmitted: (_) => _login(), decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline))),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Theme.of(context).colorScheme.errorContainer, borderRadius: BorderRadius.circular(12)), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer))),
-                      ],
-                      const SizedBox(height: 20),
-                      FilledButton.icon(onPressed: _loading ? null : _login, icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login), label: Text(_loading ? 'Signing in...' : 'Sign In')),
-                      const SizedBox(height: 14),
-                      const Text('Secure access for management and employees', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Color(0xFF6D7971))),
-                    ]),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    body: Container(
+      decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFF9FCFA), Color(0xFFE8F2ED)])),
+      child: SafeArea(child: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460), child: Card(child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 30, 28, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Align(alignment: Alignment.center, child: BrandLogo(size: 104)),
+          const SizedBox(height: 18),
+          const Text('Choudhary & Sons', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+          const Text('Civil Contractors & Suppliers', textAlign: TextAlign.center, style: TextStyle(color: brandGreen, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 22),
+          SegmentedButton<bool>(segments: const [ButtonSegment(value: false, icon: Icon(Icons.business_center_outlined), label: Text('Staff')), ButtonSegment(value: true, icon: Icon(Icons.person_search_outlined), label: Text('Applicant'))], selected: {applicantMode}, onSelectionChanged: (v) => setState(() { applicantMode = v.first; error = null; })),
+          const SizedBox(height: 18),
+          TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
+          const SizedBox(height: 12),
+          TextField(controller: password, obscureText: true, onSubmitted: (_) => login(), decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline))),
+          if (error != null) ...[const SizedBox(height: 12), Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))],
+          const SizedBox(height: 18),
+          FilledButton.icon(onPressed: loading ? null : login, icon: const Icon(Icons.login), label: Text(loading ? 'Signing in...' : applicantMode ? 'Applicant Sign In' : 'Staff Sign In')),
+          if (applicantMode) ...[const SizedBox(height: 10), OutlinedButton.icon(onPressed: openSignup, icon: const Icon(Icons.person_add_alt_1), label: const Text('Create Applicant Account'))],
+        ]),
+      ))))),
+    ),
+  );
 }
 
-class ManagementDashboard extends StatelessWidget {
-  const ManagementDashboard({super.key, required this.session});
-  final AuthSession session;
+class ApplicantSignupScreen extends StatefulWidget {
+  const ApplicantSignupScreen({super.key});
+  @override
+  State<ApplicantSignupScreen> createState() => _ApplicantSignupScreenState();
+}
+
+class _ApplicantSignupScreenState extends State<ApplicantSignupScreen> {
+  final fullName = TextEditingController();
+  final phone = TextEditingController();
+  final email = TextEditingController();
+  final password = TextEditingController();
+  final service = ApplicantPortalService();
+  bool loading = false;
+  String? message;
 
   @override
-  Widget build(BuildContext context) {
-    final modules = <({IconData icon, String title, String subtitle})>[
-      (icon: Icons.engineering_outlined, title: 'Projects', subtitle: 'Contracts, sites & progress'),
-      (icon: Icons.groups_outlined, title: 'Employees', subtitle: 'Staff, roles & records'),
-      (icon: Icons.folder_copy_outlined, title: 'Documents', subtitle: 'Contracts, CNICs, invoices & files'),
-      (icon: Icons.fact_check_outlined, title: 'Attendance', subtitle: 'Daily attendance & overtime'),
-      (icon: Icons.event_available_outlined, title: 'Leave', subtitle: 'Review and approve leave requests'),
-      (icon: Icons.payments_outlined, title: 'Payroll', subtitle: 'Salary, advances & deductions'),
-      (icon: Icons.shopping_cart_outlined, title: 'Procurement', subtitle: 'Suppliers, POs & materials'),
-      (icon: Icons.inventory_2_outlined, title: 'Inventory', subtitle: 'Site stock & consumption'),
-      (icon: Icons.account_balance_wallet_outlined, title: 'Finance', subtitle: 'Expenses, billing & profit'),
-      (icon: Icons.work_outline, title: 'Recruitment', subtitle: 'Jobs & applications'),
-      (icon: Icons.precision_manufacturing_outlined, title: 'Assets', subtitle: 'Machinery & vehicles'),
-      (icon: Icons.health_and_safety_outlined, title: 'Safety', subtitle: 'Incidents & inspections'),
-    ];
+  void dispose() { fullName.dispose(); phone.dispose(); email.dispose(); password.dispose(); super.dispose(); }
 
-    void openModule(String title) {
-      if (title == 'Documents') {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => DocumentsScreen(session: session)));
-      } else if (const {'Procurement', 'Inventory', 'Finance'}.contains(title)) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommercialDashboard(session: session)));
-      } else if (const {'Assets', 'Safety'}.contains(title)) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: session)));
-      } else {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ManagementListScreen(session: session, type: title)));
-      }
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Row(mainAxisSize: MainAxisSize.min, children: [BrandLogo(size: 38), SizedBox(width: 10), Text('Choudhary & Sons')]),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
-          IconButton(tooltip: 'Sign out', onPressed: () async { await ApiService().signOut(); if (!context.mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false); }, icon: const Icon(Icons.logout)),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final columns = width >= 1180 ? 4 : width >= 780 ? 3 : width >= 520 ? 2 : 2;
-          final ratio = width < 400 ? .93 : width < 700 ? 1.05 : 1.18;
-          return ListView(
-            padding: EdgeInsets.symmetric(horizontal: width > 1100 ? 48 : 18, vertical: 22),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(gradient: const LinearGradient(colors: [brandGreenDark, brandGreen]), borderRadius: BorderRadius.circular(20)),
-                child: Row(children: [
-                  const BrandLogo(size: 62),
-                  const SizedBox(width: 16),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Welcome, ${session.fullName}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 5),
-                    Text('Management access • ${session.role.replaceAll('_', ' ')}', style: TextStyle(color: Colors.white.withValues(alpha: .82))),
-                  ])),
-                ]),
-              ),
-              const SizedBox(height: 22),
-              const Text('Business Operations', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, color: brandInk)),
-              const SizedBox(height: 12),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: modules.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: ratio),
-                itemBuilder: (context, index) {
-                  final module = modules[index];
-                  return Card(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () => openModule(module.title),
-                      child: Padding(
-                        padding: const EdgeInsets.all(15),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Container(width: 42, height: 42, decoration: BoxDecoration(color: brandGreenSoft, borderRadius: BorderRadius.circular(12)), child: Icon(module.icon, color: brandGreen, size: 24)),
-                          const Spacer(),
-                          Text(module.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: brandInk)),
-                          const SizedBox(height: 3),
-                          Text(module.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, height: 1.25, color: brandInk.withValues(alpha: .58))),
-                        ]),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
+  Future<void> signup() async {
+    if (fullName.text.trim().isEmpty || email.text.trim().isEmpty || password.text.length < 8) { setState(() => message = 'Enter name, email and a password of at least 8 characters.'); return; }
+    setState(() { loading = true; message = null; });
+    try {
+      await service.signUp(email: email.text, password: password.text, fullName: fullName.text, phone: phone.text);
+      if (mounted) setState(() => message = 'Account created. If email confirmation is enabled, confirm your email and then sign in from Applicant mode.');
+    } catch (e) { if (mounted) setState(() => message = e.toString()); }
+    finally { if (mounted) setState(() => loading = false); }
   }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Create Applicant Account')),
+    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(18), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520), child: Card(child: Padding(padding: const EdgeInsets.all(22), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('Join Choudhary & Sons Careers', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 6),
+      const Text('Create your account, complete your CNIC/profile details, then apply to HR-announced jobs.'),
+      const SizedBox(height: 18),
+      TextField(controller: fullName, decoration: const InputDecoration(labelText: 'Full name')),
+      const SizedBox(height: 12),
+      TextField(controller: phone, decoration: const InputDecoration(labelText: 'WhatsApp / phone')),
+      const SizedBox(height: 12),
+      TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
+      const SizedBox(height: 12),
+      TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+      if (message != null) ...[const SizedBox(height: 12), Text(message!)],
+      const SizedBox(height: 18),
+      FilledButton.icon(onPressed: loading ? null : signup, icon: const Icon(Icons.person_add_alt_1), label: Text(loading ? 'Creating...' : 'Create Account')),
+    ]))))),
+  );
+}
+
+class ManagementDashboard extends StatefulWidget {
+  const ManagementDashboard({super.key, required this.session});
+  final AuthSession session;
+  @override
+  State<ManagementDashboard> createState() => _ManagementDashboardState();
+}
+
+class _ManagementDashboardState extends State<ManagementDashboard> {
+  final api = ApiService();
+  Map<String, dynamic> kpis = {};
+  bool loading = true;
+
+  final modules = const <({IconData icon, String title, String subtitle})>[
+    (icon: Icons.groups_outlined, title: 'Employees', subtitle: 'Staff, roles & records'),
+    (icon: Icons.engineering_outlined, title: 'Projects', subtitle: 'Contracts, sites & progress'),
+    (icon: Icons.description_outlined, title: 'Contracts', subtitle: 'Contract records & documents'),
+    (icon: Icons.fact_check_outlined, title: 'Attendance', subtitle: 'Daily attendance & overtime'),
+    (icon: Icons.payments_outlined, title: 'Payroll', subtitle: 'Salary, advances & deductions'),
+    (icon: Icons.event_available_outlined, title: 'Leave', subtitle: 'Approve staff leave'),
+    (icon: Icons.folder_copy_outlined, title: 'Documents', subtitle: 'CNICs, invoices & files'),
+    (icon: Icons.work_outline, title: 'Recruitment', subtitle: 'Jobs, applicants & interviews'),
+    (icon: Icons.shopping_cart_outlined, title: 'Procurement', subtitle: 'Suppliers & purchase orders'),
+    (icon: Icons.inventory_2_outlined, title: 'Inventory', subtitle: 'Materials & site stock'),
+    (icon: Icons.account_balance_wallet_outlined, title: 'Finance', subtitle: 'Expenses, invoices & profit'),
+    (icon: Icons.precision_manufacturing_outlined, title: 'Assets', subtitle: 'Machinery & vehicles'),
+    (icon: Icons.health_and_safety_outlined, title: 'Safety', subtitle: 'Incidents & inspections'),
+  ];
+
+  @override
+  void initState() { super.initState(); load(); }
+  Future<void> load() async { try { kpis = await api.dashboardKpis(widget.session.token); } finally { if (mounted) setState(() => loading = false); } }
+
+  void openModule(String title) {
+    if (title == 'Documents') Navigator.of(context).push(MaterialPageRoute(builder: (_) => DocumentsScreen(session: widget.session)));
+    else if (const {'Procurement','Inventory','Finance'}.contains(title)) Navigator.of(context).push(MaterialPageRoute(builder: (_) => CommercialDashboard(session: widget.session)));
+    else if (const {'Assets','Safety'}.contains(title)) Navigator.of(context).push(MaterialPageRoute(builder: (_) => FieldOperationsScreen(session: widget.session)));
+    else Navigator.of(context).push(MaterialPageRoute(builder: (_) => ManagementListScreen(session: widget.session, type: title)));
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: LayoutBuilder(builder: (context, constraints) {
+      final desktop = constraints.maxWidth >= 920;
+      final content = _AdminContent(session: widget.session, modules: modules, kpis: kpis, loading: loading, openModule: openModule);
+      if (!desktop) return Scaffold(appBar: AppBar(title: const Row(children: [BrandLogo(size: 38), SizedBox(width: 8), Text('Choudhary & Sons')]), actions: [IconButton(onPressed: load, icon: const Icon(Icons.refresh)), IconButton(onPressed: signOut, icon: const Icon(Icons.logout))]), body: content);
+      return Row(children: [SizedBox(width: 255, child: _AdminSidebar(session: widget.session, modules: modules, openModule: openModule, signOut: signOut)), Expanded(child: content)]);
+    }),
+  );
+
+  Future<void> signOut() async { await api.signOut(); if (!mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false); }
+}
+
+class _AdminSidebar extends StatelessWidget {
+  const _AdminSidebar({required this.session, required this.modules, required this.openModule, required this.signOut});
+  final AuthSession session;
+  final List<({IconData icon, String title, String subtitle})> modules;
+  final void Function(String) openModule;
+  final VoidCallback signOut;
+  @override
+  Widget build(BuildContext context) => Container(
+    color: brandGreenDark,
+    child: SafeArea(child: Column(children: [
+      const Padding(padding: EdgeInsets.all(18), child: Column(children: [BrandLogo(size: 72), SizedBox(height: 10), Text('Choudhary & Sons', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)), Text('Civil Contractors & Suppliers', style: TextStyle(color: Colors.white70, fontSize: 12))])),
+      Expanded(child: ListView(padding: const EdgeInsets.symmetric(horizontal: 10), children: [
+        _SideItem(icon: Icons.dashboard, label: 'Dashboard', selected: true, onTap: () {}),
+        const Padding(padding: EdgeInsets.fromLTRB(12, 16, 12, 7), child: Text('MANAGEMENT', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w700))),
+        ...modules.map((m) => _SideItem(icon: m.icon, label: m.title, onTap: () => openModule(m.title))),
+      ])),
+      Padding(padding: const EdgeInsets.all(12), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withValues(alpha: .08), borderRadius: BorderRadius.circular(14)), child: Row(children: [CircleAvatar(backgroundColor: Colors.white, child: Text(session.fullName.isEmpty ? 'A' : session.fullName.substring(0,1), style: const TextStyle(color: brandGreen, fontWeight: FontWeight.bold))), const SizedBox(width: 9), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(session.fullName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)), Text(session.role.replaceAll('_',' '), style: const TextStyle(color: Colors.white60, fontSize: 11))])), IconButton(onPressed: signOut, icon: const Icon(Icons.logout, color: Colors.white70))]))),
+    ])),
+  );
+}
+
+class _SideItem extends StatelessWidget {
+  const _SideItem({required this.icon, required this.label, required this.onTap, this.selected = false});
+  final IconData icon; final String label; final VoidCallback onTap; final bool selected;
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 4), child: ListTile(dense: true, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), tileColor: selected ? Colors.white.withValues(alpha: .10) : Colors.transparent, leading: Icon(icon, color: Colors.white, size: 20), title: Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)), onTap: onTap));
+}
+
+class _AdminContent extends StatelessWidget {
+  const _AdminContent({required this.session, required this.modules, required this.kpis, required this.loading, required this.openModule});
+  final AuthSession session;
+  final List<({IconData icon, String title, String subtitle})> modules;
+  final Map<String, dynamic> kpis;
+  final bool loading;
+  final void Function(String) openModule;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(24),
+    children: [
+      Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Welcome back, ${session.fullName}', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)), const SizedBox(height: 3), const Text("Here's what's happening with your company today.")])), const BrandLogo(size: 54)]),
+      const SizedBox(height: 20),
+      LayoutBuilder(builder: (context, c) { final count = c.maxWidth > 1000 ? 4 : c.maxWidth > 580 ? 2 : 2; return GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: count, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: c.maxWidth > 1000 ? 2.2 : 1.5, children: [
+        _Kpi(icon: Icons.groups, label: 'Total Employees', value: loading ? '...' : '${kpis['employees'] ?? 0}', tone: const Color(0xFFEAF8EF)),
+        _Kpi(icon: Icons.work, label: 'Active Projects', value: loading ? '...' : '${kpis['active_projects'] ?? 0}', tone: const Color(0xFFEAF3FF)),
+        _Kpi(icon: Icons.event_available, label: 'Pending Leave', value: loading ? '...' : '${kpis['pending_leave'] ?? 0}', tone: const Color(0xFFFFF7E8)),
+        _Kpi(icon: Icons.health_and_safety, label: 'Safety Alerts', value: loading ? '...' : '${kpis['open_safety_incidents'] ?? 0}', tone: const Color(0xFFFFEEF0)),
+      ]); }),
+      const SizedBox(height: 20),
+      const Text('Quick Actions & Operations', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 10),
+      LayoutBuilder(builder: (context, c) { final count = c.maxWidth > 1050 ? 5 : c.maxWidth > 700 ? 3 : 2; return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: modules.length, gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: count, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: c.maxWidth > 1050 ? 1.45 : 1.15), itemBuilder: (_, i) { final m = modules[i]; return Card(child: InkWell(borderRadius: BorderRadius.circular(18), onTap: () => openModule(m.title), child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Container(width: 42, height: 42, decoration: BoxDecoration(color: brandGreenSoft, borderRadius: BorderRadius.circular(12)), child: Icon(m.icon, color: brandGreen)), const Spacer(), Text(m.title, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text(m.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.black54))])))); }); }),
+    ],
+  );
+}
+
+class _Kpi extends StatelessWidget {
+  const _Kpi({required this.icon, required this.label, required this.value, required this.tone});
+  final IconData icon; final String label; final String value; final Color tone;
+  @override
+  Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.black.withValues(alpha: .05))), child: Row(children: [Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: brandGreen)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 12)), Text(value, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900))]))]));
 }
 
 class EmployeeDashboard extends StatefulWidget {
@@ -289,67 +308,35 @@ class EmployeeDashboard extends StatefulWidget {
 }
 
 class _EmployeeDashboardState extends State<EmployeeDashboard> {
-  final _api = ApiService();
-  bool _busy = false;
+  final api = ApiService();
+  bool busy = false;
 
-  Future<void> _attendanceAction(bool checkIn) async {
-    setState(() => _busy = true);
-    try {
-      checkIn ? await _api.checkIn(widget.session.token) : await _api.checkOut(widget.session.token);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(checkIn ? 'Checked in successfully' : 'Checked out successfully')));
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
-    } finally { if (mounted) setState(() => _busy = false); }
+  Future<void> attendanceAction(bool checkIn) async {
+    setState(() => busy = true);
+    try { checkIn ? await api.checkIn(widget.session.token) : await api.checkOut(widget.session.token); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(checkIn ? 'Checked in successfully' : 'Checked out successfully'))); }
+    catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
+    finally { if (mounted) setState(() => busy = false); }
   }
 
   @override
   Widget build(BuildContext context) {
-    final menu = <({IconData icon, String title, String subtitle})>[
+    final menu = const <({IconData icon, String title, String subtitle})>[
       (icon: Icons.person_outline, title: 'My Profile', subtitle: 'Personal and employment details'),
-      (icon: Icons.calendar_month_outlined, title: 'Attendance History', subtitle: 'View check-in and check-out records'),
+      (icon: Icons.calendar_month_outlined, title: 'Attendance History', subtitle: 'Check-in and check-out records'),
       (icon: Icons.payments_outlined, title: 'Salary & Payslips', subtitle: 'Salary, deductions and advances'),
       (icon: Icons.event_busy_outlined, title: 'Leave Requests', subtitle: 'Apply and track leave'),
-      (icon: Icons.work_outline, title: 'Open Jobs', subtitle: 'View internal and public vacancies'),
-      (icon: Icons.campaign_outlined, title: 'Notices', subtitle: 'Company announcements and updates'),
+      (icon: Icons.work_outline, title: 'Open Jobs', subtitle: 'Internal and public vacancies'),
+      (icon: Icons.campaign_outlined, title: 'Notices', subtitle: 'Company announcements'),
     ];
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Row(mainAxisSize: MainAxisSize.min, children: [BrandLogo(size: 36), SizedBox(width: 10), Text('Employee Portal')]),
-        actions: [IconButton(tooltip: 'Sign out', onPressed: () async { await _api.signOut(); if (!mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false); }, icon: const Icon(Icons.logout))],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: brandGreenDark, borderRadius: BorderRadius.circular(20)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Hello, ${widget.session.fullName}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text('Manage your workday and employment information.', style: TextStyle(color: Colors.white.withValues(alpha: .78))),
-            ]),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Row(children: [Icon(Icons.fingerprint, color: brandGreen), SizedBox(width: 10), Text('Today\'s Attendance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))]),
-                const SizedBox(height: 16),
-                FilledButton.icon(onPressed: _busy ? null : () => _attendanceAction(true), icon: const Icon(Icons.login), label: const Text('Check In')),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(onPressed: _busy ? null : () => _attendanceAction(false), icon: const Icon(Icons.logout), label: const Text('Check Out')),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 14),
-          ...menu.map((item) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Card(child: ListTile(leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: brandGreenSoft, borderRadius: BorderRadius.circular(12)), child: Icon(item.icon, color: brandGreen)), title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w800)), subtitle: Text(item.subtitle), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmployeeDataScreen(session: widget.session, type: item.title))))),
-          )),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Employee Portal'), actions: [IconButton(onPressed: () async { await api.signOut(); if (!mounted) return; Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false); }, icon: const Icon(Icons.logout))]),
+      body: ListView(padding: const EdgeInsets.all(18), children: [
+        Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: brandGreenDark, borderRadius: BorderRadius.circular(20)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Hello, ${widget.session.fullName}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)), const SizedBox(height: 4), const Text('Manage your workday and employment information.', style: TextStyle(color: Colors.white70))])),
+        const SizedBox(height: 14),
+        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const Text("Today's Attendance", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), const SizedBox(height: 12), FilledButton.icon(onPressed: busy ? null : () => attendanceAction(true), icon: const Icon(Icons.login), label: const Text('Check In')), const SizedBox(height: 8), OutlinedButton.icon(onPressed: busy ? null : () => attendanceAction(false), icon: const Icon(Icons.logout), label: const Text('Check Out'))]))),
+        const SizedBox(height: 12),
+        ...menu.map((item) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Card(child: ListTile(leading: Icon(item.icon), title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w800)), subtitle: Text(item.subtitle), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => EmployeeDataScreen(session: widget.session, type: item.title))))))),
+      ]),
     );
   }
 }
