@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/commercial_dashboard.dart';
 import 'screens/documents_screen.dart';
@@ -7,7 +8,18 @@ import 'screens/field_operations_screen.dart';
 import 'screens/management_lists.dart';
 import 'services/api_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: const String.fromEnvironment(
+      'SUPABASE_URL',
+      defaultValue: 'https://lvvltukzpqtkmpcdsoxq.supabase.co',
+    ),
+    anonKey: const String.fromEnvironment(
+      'SUPABASE_PUBLISHABLE_KEY',
+      defaultValue: 'sb_publishable_7FZo2WyCepTAWlqPCkdoRg_QpBlpXdC',
+    ),
+  );
   runApp(const ChoudharySonsApp());
 }
 
@@ -133,7 +145,21 @@ class ManagementDashboard extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Choudhary & Sons'), actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none))]),
+      appBar: AppBar(
+        title: const Text('Choudhary & Sons'),
+        actions: [
+          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none)),
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: () async {
+              await ApiService().signOut();
+              if (!context.mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+            },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -208,7 +234,20 @@ class _EmployeeDashboardState extends State<EmployeeDashboard> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Employee Portal')),
+      appBar: AppBar(
+        title: const Text('Employee Portal'),
+        actions: [
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: () async {
+              await _api.signOut();
+              if (!mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+            },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
