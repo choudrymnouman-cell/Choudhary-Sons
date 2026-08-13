@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApplicantPortalService {
+  static const String _webRedirect = 'https://choudrymnouman-cell.github.io/Choudhary-Sons/';
+
   SupabaseClient get _db => Supabase.instance.client;
 
   User get _user {
@@ -15,13 +17,24 @@ class ApplicantPortalService {
     final response = await _db.auth.signUp(
       email: email.trim(),
       password: password,
-      data: {'full_name': fullName.trim(), 'phone': phone?.trim()},
+      emailRedirectTo: _webRedirect,
+      data: {'full_name': fullName.trim(), 'phone': phone?.trim(), 'signup_source': 'applicant_portal'},
     );
     if (response.user == null) throw Exception('Unable to create account.');
     if (response.session != null) {
       await ensureApplicantRole();
       await ensureApplicantProfile(fullName: fullName.trim(), phone: phone?.trim());
     }
+  }
+
+  Future<void> resendSignupConfirmation(String email) async {
+    final value = email.trim();
+    if (value.isEmpty) throw Exception('Enter your email address first.');
+    await _db.auth.resend(
+      type: OtpType.signup,
+      email: value,
+      emailRedirectTo: _webRedirect,
+    );
   }
 
   Future<void> ensureApplicantRole() async {
