@@ -30,15 +30,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Build web
-        env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-        run: |
-          if [ -z "$API_BASE_URL" ]; then
-            echo "API_BASE_URL repository secret is required for deployment."
-            exit 1
-          fi
-          flutter build web --release --base-href "/Choudhary-Sons/" --dart-define=API_BASE_URL="$API_BASE_URL"
+      - name: Build Supabase-only web app
+        run: flutter build web --release --base-href "/Choudhary-Sons/"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: mobile/build/web
