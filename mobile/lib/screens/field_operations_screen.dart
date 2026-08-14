@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import 'operations_create_forms.dart';
+import 'project_progress_screen.dart';
 
 class FieldOperationsScreen extends StatefulWidget {
   const FieldOperationsScreen({super.key, required this.session});
@@ -40,6 +41,8 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
     if (changed == true) _load();
   }
 
+  void _openProgress() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProjectProgressScreen(session: widget.session)));
+
   String _money(dynamic value) {
     final amount = value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
     return 'PKR ${amount.toStringAsFixed(0)}';
@@ -56,7 +59,7 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
           children: [
             Text('Operations Overview', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('Live site, fleet and safety information.'),
+            const Text('Live site, project, fleet and safety information.'),
             const SizedBox(height: 18),
             GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.25, children: [
               _MetricCard(label: 'Active Projects', value: '${_kpis['active_projects'] ?? 0}', icon: Icons.engineering_outlined),
@@ -67,6 +70,9 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
               _MetricCard(label: 'Maintenance', value: _money(_assetCosts['maintenance_cost']), icon: Icons.build_outlined),
             ]),
             const SizedBox(height: 20),
+            Text('Project Control', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            _ActionTile(icon: Icons.insights_outlined, title: 'Project Progress Dashboard', subtitle: 'Track status, timeline, contract value and site location', onTap: _openProgress),
+            const SizedBox(height: 12),
             Text('Quick Actions', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             _ActionTile(icon: Icons.precision_manufacturing_outlined, title: 'Add Machinery / Vehicle', onTap: () => _open('Asset')),
             _ActionTile(icon: Icons.local_gas_station_outlined, title: 'Record Fuel', onTap: () => _open('Fuel Log')),
@@ -95,8 +101,8 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _ActionTile extends StatelessWidget {
-  const _ActionTile({required this.icon, required this.title, required this.onTap});
-  final IconData icon; final String title; final VoidCallback onTap;
+  const _ActionTile({required this.icon, required this.title, required this.onTap, this.subtitle});
+  final IconData icon; final String title; final String? subtitle; final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Card(child: ListTile(leading: Icon(icon), title: Text(title), trailing: const Icon(Icons.chevron_right), onTap: onTap));
+  Widget build(BuildContext context) => Card(child: ListTile(leading: Icon(icon), title: Text(title), subtitle: subtitle == null ? null : Text(subtitle!), trailing: const Icon(Icons.chevron_right), onTap: onTap));
 }
