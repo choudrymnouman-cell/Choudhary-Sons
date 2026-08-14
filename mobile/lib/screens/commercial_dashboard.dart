@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import 'boq_management_screen.dart';
 import 'operations_create_forms.dart';
 import 'project_financial_screen.dart';
 
@@ -41,6 +42,7 @@ class _CommercialDashboardState extends State<CommercialDashboard> {
   }
 
   void _openFinancials() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProjectFinancialScreen(session: widget.session)));
+  void _openBoq() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BoqManagementScreen(session: widget.session)));
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +75,7 @@ class _CommercialDashboardState extends State<CommercialDashboard> {
             _ActionTile(icon: Icons.shopping_cart_checkout_outlined, title: 'Create Purchase Order', subtitle: 'Create supplier purchase order', onTap: () => _open('Purchase Order')),
             _ActionTile(icon: Icons.payments_outlined, title: 'Record Project Expense', subtitle: 'Labour, material, fuel and site expense', onTap: () => _open('Expense')),
             _ActionTile(icon: Icons.request_quote_outlined, title: 'Create Client Invoice', subtitle: 'Billing and receivables', onTap: () => _open('Invoice')),
-            const _ActionTile(icon: Icons.calculate_outlined, title: 'BOQ Management', subtitle: 'Quantities, unit rates, progress and project value'),
+            _ActionTile(icon: Icons.calculate_outlined, title: 'BOQ Management', subtitle: 'Quantities, unit rates, executed work and remaining value', onTap: _openBoq),
             _ActionTile(icon: Icons.trending_up_outlined, title: 'Project Financial Control', subtitle: 'Contract value, cost, billing, collections and estimated profit', onTap: _openFinancials),
           ],
         ),
