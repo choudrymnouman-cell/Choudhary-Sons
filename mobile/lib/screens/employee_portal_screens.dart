@@ -2,6 +2,112 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 
+class EmployeePortalHome extends StatefulWidget {
+  const EmployeePortalHome({
+    super.key,
+    required this.session,
+    required this.onLogout,
+  });
+
+  final AuthSession session;
+  final VoidCallback onLogout;
+
+  @override
+  State<EmployeePortalHome> createState() => _EmployeePortalHomeState();
+}
+
+class _EmployeePortalHomeState extends State<EmployeePortalHome> {
+  final _api = ApiService();
+  bool _savingAttendance = false;
+
+  Future<void> _recordAttendance(bool checkIn) async {
+    setState(() => _savingAttendance = true);
+    try {
+      if (checkIn) {
+        await _api.checkIn(widget.session.token);
+      } else {
+        await _api.checkOut(widget.session.token);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(checkIn ? 'Checked in' : 'Checked out')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingAttendance = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const menu = [
+      ('My Profile', Icons.person_outline),
+      ('Attendance History', Icons.calendar_month_outlined),
+      ('Salary & Payslips', Icons.payments_outlined),
+      ('Leave Requests', Icons.event_busy_outlined),
+      ('Open Jobs', Icons.work_outline),
+      ('Notices', Icons.campaign_outlined),
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Employee Portal'),
+        actions: [
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Text(
+            'Welcome, ${widget.session.fullName}',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _savingAttendance ? null : () => _recordAttendance(true),
+            icon: const Icon(Icons.login),
+            label: const Text('Check In'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _savingAttendance
+                ? null
+                : () => _recordAttendance(false),
+            icon: const Icon(Icons.logout),
+            label: const Text('Check Out'),
+          ),
+          const SizedBox(height: 12),
+          for (final (title, icon) in menu)
+            ListTile(
+              leading: Icon(icon),
+              title: Text(title),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      EmployeeDataScreen(session: widget.session, type: title),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class EmployeeDataScreen extends StatelessWidget {
   const EmployeeDataScreen({super.key, required this.session, required this.type});
   final AuthSession session;

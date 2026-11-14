@@ -24,7 +24,7 @@ The `company-documents` bucket is private. Do not put a Supabase secret/service-
 
 ## First owner
 
-The database provides a one-time `claim_first_owner()` RPC. It succeeds only while no owner exists. After the first owner is established, subsequent calls fail. This is intended only for initial company setup.
+Owner assignment is performed by a database administrator after verifying the intended account. Migration `20261114070000_restrict_first_owner_claim.sql` removes client access to `claim_first_owner()`. Apply that migration when restoring a backup taken before it was applied, before making the restored API reachable.
 
 ## Deployment
 
