@@ -24,15 +24,45 @@ class ApiService {
 
   Future<AuthSession> login(String email, String password) async {
     final response = await _db.auth.signInWithPassword(email: email.trim(), password: password);
-    final user = response.user;
     final session = response.session;
-    if (user == null || session == null) throw Exception('Login failed');
-    final profile = Map<String, dynamic>.from(await _db.from('profiles').select().eq('id', user.id).single());
-    if (profile['is_active'] == false) {
-      await _db.auth.signOut();
+    if (session == null) throw Exception('Login failed');
+    try {
+      return await _loadProfile(session);
+    } catch (_) {
+      await signOut();
+      rethrow;
+    }
+  }
+
+  Future<AuthSession?> restoreSession() async {
+    final session = _db.auth.currentSession;
+    if (session == null) return null;
+    return _loadProfile(session);
+  }
+
+  Future<AuthSession> _loadProfile(Session session) async {
+    final user = session.user;
+    final profile = await _db
+        .from('profiles')
+        .select('full_name,email,role,is_active')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (profile == null) throw Exception('This account has no profile. Contact management.');
+    if (profile['is_active'] != true) {
       throw Exception('This account is inactive. Contact management.');
     }
-    return AuthSession(token: session.accessToken, userId: user.id, fullName: (profile['full_name'] ?? user.email ?? 'User').toString(), email: (profile['email'] ?? user.email ?? '').toString(), role: (profile['role'] ?? 'employee').toString());
+    final role = (profile['role'] as String? ?? '').trim().toLowerCase();
+    final result = AuthSession(
+      token: session.accessToken,
+      userId: user.id,
+      fullName: (profile['full_name'] ?? user.email ?? 'User').toString(),
+      email: (profile['email'] ?? user.email ?? '').toString(),
+      role: role,
+    );
+    if (!result.isManagement && role != 'employee' && role != 'applicant') {
+      throw Exception('This account has no supported role. Contact management.');
+    }
+    return result;
   }
 
   Future<void> signOut() => _db.auth.signOut();

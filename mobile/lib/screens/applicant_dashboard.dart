@@ -11,8 +11,9 @@ const portalDark = Color(0xFF073D2A);
 const portalSoft = Color(0xFFEAF4EF);
 
 class ApplicantDashboard extends StatefulWidget {
-  const ApplicantDashboard({super.key, required this.session});
+  const ApplicantDashboard({super.key, required this.session, required this.onLogout});
   final AuthSession session;
+  final VoidCallback onLogout;
 
   @override
   State<ApplicantDashboard> createState() => _ApplicantDashboardState();
@@ -115,15 +116,6 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
     }
   }
 
-  Future<void> _signOut() async {
-    await ApiService().signOut();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const _ApplicantSignedOutPlaceholder()),
-      (_) => false,
-    );
-  }
-
   List<Map<String, dynamic>> get filteredJobs {
     final q = query.trim().toLowerCase();
     return jobs.map((e) => Map<String, dynamic>.from(e as Map)).where((job) {
@@ -147,7 +139,7 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
         ]),
         actions: [
           IconButton(tooltip: 'Refresh', onPressed: load, icon: const Icon(Icons.refresh)),
-          IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+          IconButton(tooltip: 'Sign out', onPressed: widget.onLogout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: RefreshIndicator(
@@ -456,10 +448,4 @@ class _EmptyState extends StatelessWidget {
   final String subtitle;
   @override
   Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(28), child: Center(child: Column(children: [Icon(icon, size: 42, color: portalGreen), const SizedBox(height: 10), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(subtitle, textAlign: TextAlign.center)]))));
-}
-
-class _ApplicantSignedOutPlaceholder extends StatelessWidget {
-  const _ApplicantSignedOutPlaceholder();
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text('Signed out. Refresh the page to sign in again.')));
 }
