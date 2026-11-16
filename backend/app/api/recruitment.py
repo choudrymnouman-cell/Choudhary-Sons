@@ -50,7 +50,7 @@ class ProfileInput(BaseModel):
     whatsapp_number: str | None = Field(default=None, max_length=30)
     phone: str | None = Field(default=None, max_length=30)
     education: str | None = Field(default=None, max_length=500)
-    experience_years: Decimal = Field(default=0, ge=0, max_digits=5, decimal_places=2)
+    experience_years: Decimal = Field(default=Decimal("0"), ge=0, max_digits=5, decimal_places=2)
     experience_details: str | None = Field(default=None, max_length=3000)
     skills: str | None = Field(default=None, max_length=1000)
     bank_account_title: str | None = Field(default=None, max_length=150)
@@ -112,7 +112,7 @@ class HireInput(BaseModel):
     employee_code: str = Field(min_length=1, max_length=30)
     designation: str = Field(min_length=1, max_length=120)
     department: str | None = Field(default=None, max_length=120)
-    basic_salary: Decimal = Field(default=0, ge=0, max_digits=12, decimal_places=2)
+    basic_salary: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
     joining_date: date = Field(default_factory=date.today)
 
 
