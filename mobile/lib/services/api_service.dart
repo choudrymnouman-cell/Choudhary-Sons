@@ -1,6 +1,14 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+part 'fastapi_service.dart';
+part 'recruitment_http.dart';
+
+const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 
 class AuthSession {
   final String token;
@@ -15,6 +23,71 @@ class AuthSession {
 }
 
 class ApiService {
+  factory ApiService() => selfHostedWeb ? FastApiService() : ApiService._();
+
+  ApiService._();
+
+  Future<Uint8List> downloadLocalDocument(String token, int id) =>
+      throw UnsupportedError('Local documents require the self-hosted backend.');
+
+  Future<List<dynamic>> boqItems(String token, int projectId) async =>
+      await _db.from('boq_items').select().eq('project_id', projectId).order('id');
+
+  Future<void> addBoqItem(String token, Map<String, dynamic> item) async {
+    await _db.from('boq_items').insert(item);
+  }
+
+  Future<void> updateBoqProgress(String token, int itemId, num quantity) async {
+    await _db.from('boq_items').update({'completed_quantity': quantity}).eq('id', itemId);
+  }
+
+  Future<List<dynamic>> stockMovements(String token) async =>
+      List<dynamic>.from(await _db.from('material_stock_movements').select('*, materials(name,unit), projects(name,code)').order('created_at', ascending: false).limit(100));
+
+  Future<List<dynamic>> deliveries(String token) async =>
+      List<dynamic>.from(await _db.from('purchase_deliveries').select('*, purchase_orders(po_number), materials(name,unit)').order('created_at',ascending:false).limit(100));
+
+  Future<List<dynamic>> supplierPayments(String token) async =>
+      List<dynamic>.from(await _db.from('supplier_payments').select('*, suppliers(name), purchase_orders(po_number)').order('created_at',ascending:false).limit(100));
+
+  Future<List<dynamic>> clients(String token) async =>
+      List<dynamic>.from(await _db.from('clients').select().order('name'));
+
+  Future<List<dynamic>> receivables(String token) async =>
+      List<dynamic>.from(await _db.from('client_invoices').select('*, clients(name), projects(name,code)').order('invoice_date',ascending:false));
+
+  Future<void> recordStockMovement(String token, Map<String, dynamic> data) async {
+    await _db.rpc('record_material_stock_movement', params: {
+      'p_material_id': data['material_id'],
+      'p_project_id': data['project_id'],
+      'p_type': data['movement_type'],
+      'p_quantity': data['quantity'],
+      'p_unit_cost': data['unit_cost'] ?? 0,
+      'p_reference': data['reference'],
+      'p_notes': data['notes'],
+    });
+  }
+
+  Future<void> recordDelivery(String token, Map<String, dynamic> data) =>
+      throw UnsupportedError('Delivery recording requires the self-hosted backend.');
+
+  Future<void> recordSupplierPayment(String token, Map<String, dynamic> data) async {
+    await _db.from('supplier_payments').insert(data);
+  }
+
+  Future<void> createClient(String token, String name) async {
+    await _db.from('clients').insert({'name': name});
+  }
+
+  Future<void> receiveInvoice(String token, Map<String, dynamic> invoice, double amount) async {
+    double number(dynamic value) => double.tryParse(value.toString()) ?? 0;
+    final paid = number(invoice['paid_amount']) + amount;
+    await _db.from('client_invoices').update({
+      'paid_amount': paid,
+      'status': paid >= number(invoice['total_amount']) ? 'paid' : 'partial',
+    }).eq('id', invoice['id']);
+  }
+
   SupabaseClient get _db => Supabase.instance.client;
   User get _user {
     final user = _db.auth.currentUser;
@@ -24,15 +97,45 @@ class ApiService {
 
   Future<AuthSession> login(String email, String password) async {
     final response = await _db.auth.signInWithPassword(email: email.trim(), password: password);
-    final user = response.user;
     final session = response.session;
-    if (user == null || session == null) throw Exception('Login failed');
-    final profile = Map<String, dynamic>.from(await _db.from('profiles').select().eq('id', user.id).single());
-    if (profile['is_active'] == false) {
-      await _db.auth.signOut();
+    if (session == null) throw Exception('Login failed');
+    try {
+      return await _loadProfile(session);
+    } catch (_) {
+      await signOut();
+      rethrow;
+    }
+  }
+
+  Future<AuthSession?> restoreSession() async {
+    final session = _db.auth.currentSession;
+    if (session == null) return null;
+    return _loadProfile(session);
+  }
+
+  Future<AuthSession> _loadProfile(Session session) async {
+    final user = session.user;
+    final profile = await _db
+        .from('profiles')
+        .select('full_name,email,role,is_active')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (profile == null) throw Exception('This account has no profile. Contact management.');
+    if (profile['is_active'] != true) {
       throw Exception('This account is inactive. Contact management.');
     }
-    return AuthSession(token: session.accessToken, userId: user.id, fullName: (profile['full_name'] ?? user.email ?? 'User').toString(), email: (profile['email'] ?? user.email ?? '').toString(), role: (profile['role'] ?? 'employee').toString());
+    final role = (profile['role'] as String? ?? '').trim().toLowerCase();
+    final result = AuthSession(
+      token: session.accessToken,
+      userId: user.id,
+      fullName: (profile['full_name'] ?? user.email ?? 'User').toString(),
+      email: (profile['email'] ?? user.email ?? '').toString(),
+      role: role,
+    );
+    if (!result.isManagement && role != 'employee' && role != 'applicant') {
+      throw Exception('This account has no supported role. Contact management.');
+    }
+    return result;
   }
 
   Future<void> signOut() => _db.auth.signOut();

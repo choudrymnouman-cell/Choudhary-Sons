@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
@@ -78,6 +79,28 @@ async def upload_document_to_supabase(
     return document
 
 
+@router.get("/documents/{document_id}/download")
+def download_local_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+):
+    document = db.get(CompanyDocument, document_id)
+    if document is None or not document.file_url.startswith("/uploads/"):
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    name = document.file_url.removeprefix("/uploads/")
+    upload_dir = Path(settings.upload_dir).resolve()
+    file_path = (upload_dir / name).resolve()
+    if Path(name).name != name or file_path.parent != upload_dir or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Document file not found")
+    return FileResponse(
+        file_path,
+        filename=name,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.get("/documents/{document_id}/download-url")
 def document_download_url(
     document_id: int,
@@ -87,6 +110,8 @@ def document_download_url(
     document = db.get(CompanyDocument, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
+    if document.file_url.startswith("/uploads/"):
+        return {"url": f"/api/v1/documents/{document_id}/download", "expires_in": None}
     if not document.file_url.startswith("supabase://"):
         return {"url": document.file_url, "expires_in": None}
 

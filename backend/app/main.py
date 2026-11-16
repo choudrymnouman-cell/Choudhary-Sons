@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import attendance, auth, commercial, documents, employees, field_ops, operations
+from app.api import attendance, auth, commercial, documents, employees, field_ops, operations, recruitment, trade
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.models import commercial as commercial_models  # noqa: F401
@@ -16,9 +16,6 @@ from app.models import core, operations as operations_models  # noqa: F401
 # Production environments should run Alembic migrations before starting Uvicorn.
 if settings.environment.lower() == "development":
     Base.metadata.create_all(bind=engine)
-
-upload_dir = Path(settings.upload_dir)
-upload_dir.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title=settings.app_name,
@@ -34,14 +31,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Local-disk uploads remain available as a development fallback.
-app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
-
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
 app.include_router(attendance.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
+app.include_router(recruitment.router, prefix="/api/v1")
 app.include_router(commercial.router, prefix="/api/v1")
+app.include_router(trade.router, prefix="/api/v1")
 app.include_router(field_ops.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 
@@ -94,3 +90,8 @@ def modules():
             "web",
         ]
     }
+
+# Serve the optional release bundle on the same origin as the API.
+web_dir = Path("/app/web")
+if (web_dir / "index.html").is_file():
+    app.mount("/web", StaticFiles(directory=web_dir, html=True), name="web")

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_service.dart';
 
@@ -11,7 +10,6 @@ class MaterialStockScreen extends StatefulWidget {
 
 class _MaterialStockScreenState extends State<MaterialStockScreen> {
   final _api = ApiService();
-  final _db = Supabase.instance.client;
   bool _loading = true;
   String? _error;
   List<dynamic> _materials = [], _projects = [], _history = [];
@@ -21,7 +19,7 @@ class _MaterialStockScreenState extends State<MaterialStockScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final results = await Future.wait([_api.materials(widget.session.token), _api.projects(widget.session.token), _db.from('material_stock_movements').select('*, materials(name,unit), projects(name,code)').order('created_at', ascending: false).limit(100)]);
+      final results = await Future.wait([_api.materials(widget.session.token), _api.projects(widget.session.token), _api.stockMovements(widget.session.token)]);
       if (!mounted) return;
       setState(() { _materials = results[0] as List; _projects = results[1] as List; _history = results[2] as List; });
     } catch (e) { if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', '')); }
@@ -51,7 +49,7 @@ class _MaterialStockScreenState extends State<MaterialStockScreen> {
     )));
     if (ok != true || _num(qty.text) <= 0) return;
     try {
-      await _db.rpc('record_material_stock_movement', params:{'p_material_id':materialId,'p_project_id':projectId,'p_type':type,'p_quantity':_num(qty.text),'p_unit_cost':_num(cost.text),'p_reference':ref.text.trim().isEmpty?null:ref.text.trim(),'p_notes':notes.text.trim().isEmpty?null:notes.text.trim()});
+      await _api.recordStockMovement(widget.session.token, {'material_id':materialId,'project_id':projectId,'movement_type':type,'quantity':_num(qty.text),'unit_cost':cost.text.trim().isEmpty?null:_num(cost.text),'reference':ref.text.trim().isEmpty?null:ref.text.trim(),'notes':notes.text.trim().isEmpty?null:notes.text.trim()});
       await _load();
     } catch(e) { if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString()))); }
   }

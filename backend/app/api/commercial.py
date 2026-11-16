@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -66,6 +66,10 @@ class BoqItemCreate(BaseModel):
     quantity: float
     unit_rate: float
     completed_quantity: float = 0
+
+
+class BoqProgressUpdate(BaseModel):
+    completed_quantity: float = Field(ge=0, allow_inf_nan=False)
 
 
 class ExpenseCreate(BaseModel):
@@ -155,6 +159,24 @@ def create_boq_item(payload: BoqItemCreate, db: Session = Depends(get_db), _: Us
     data["amount"] = payload.quantity * payload.unit_rate
     item = BoqItem(**data)
     db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/boq/{item_id}/progress")
+def update_boq_progress(
+    item_id: int,
+    payload: BoqProgressUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_management),
+):
+    item = db.get(BoqItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="BOQ item not found")
+    if payload.completed_quantity > float(item.quantity):
+        raise HTTPException(status_code=422, detail="Completed quantity exceeds the item quantity")
+    item.completed_quantity = payload.completed_quantity
     db.commit()
     db.refresh(item)
     return item

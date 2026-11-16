@@ -22,3 +22,48 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Build Flutter Web
         run: flutter build web --release --base-href "/Choudhary-Sons/"
+      - name: Build self-hosted Flutter Web
+        run: flutter build web --release --base-href "/web/" --dart-define=SELF_HOSTED_WEB=true
+      - name: Upload private-test web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: choudhary-self-hosted-web
+          path: mobile/build/web
+          if-no-files-found: error
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: choudhary_ci
+          POSTGRES_PASSWORD: ci-test-password
+          POSTGRES_DB: choudhary_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U choudhary_ci -d choudhary_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+psycopg://choudhary_ci:ci-test-password@localhost:5432/choudhary_ci
+      SECRET_KEY: ci-test-only
+      ENVIRONMENT: production
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt pytest
+      - name: Verify upgrade from existing installs
+        run: |
+          alembic upgrade 0001_initial_schema
+          python -m app.scripts.check_release_schema seed
+          alembic upgrade head
+          python -m app.scripts.check_release_schema check
+      - run: python -m pytest -q

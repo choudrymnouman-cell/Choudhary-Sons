@@ -1,0 +1,9 @@
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ./mobile/build/web
+        target: /app/web
+        read_only: true
+        bind:
+          create_host_path: false

@@ -241,7 +241,12 @@ async def upload_document(
         uploaded_by=user.id,
     )
     db.add(document)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        stored_path.unlink(missing_ok=True)
+        raise
     db.refresh(document)
     return document
 
@@ -272,6 +277,8 @@ def create_notice(payload: NoticeCreate, db: Session = Depends(get_db), user: Us
 
 @router.get("/notices")
 def list_notices(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role == UserRole.APPLICANT:
+        raise HTTPException(403, "Staff access required")
     query = db.query(Notice).filter(Notice.is_active.is_(True))
     return query.order_by(Notice.created_at.desc()).limit(50).all()
 

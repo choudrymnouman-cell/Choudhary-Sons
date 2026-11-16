@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../services/applicant_portal_service.dart';
+import '../services/applicant_career_features_service.dart';
 import '../services/applicant_saved_jobs_service.dart';
 import 'applicant_profile_screen.dart';
 import 'applicant_hr_screen.dart';
+import 'applicant_notifications_screen.dart';
 
 const portalGreen = Color(0xFF0B5A3C);
 const portalDark = Color(0xFF073D2A);
 const portalSoft = Color(0xFFEAF4EF);
 
 class ApplicantDashboard extends StatefulWidget {
-  const ApplicantDashboard({super.key, required this.session});
+  const ApplicantDashboard({super.key, required this.session, required this.onLogout});
   final AuthSession session;
+  final VoidCallback onLogout;
 
   @override
   State<ApplicantDashboard> createState() => _ApplicantDashboardState();
@@ -21,6 +24,7 @@ class ApplicantDashboard extends StatefulWidget {
 class _ApplicantDashboardState extends State<ApplicantDashboard> {
   final service = ApplicantPortalService();
   final savedService = ApplicantSavedJobsService();
+  final career = ApplicantCareerFeaturesService();
   final search = TextEditingController();
 
   bool loading = true;
@@ -88,9 +92,57 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
     await load();
   }
 
-  Future<void> _apply(Map<String, dynamic> job) async {
+  Future<void> _notifications() async {
     try {
-      await service.applyForJob(vacancyId: job['id'] as int);
+      final items = await career.notifications();
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) =>
+        ApplicantNotificationsScreen(items: items, onRead: career.markNotificationRead)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _preferences() async {
+    try {
+      final settings = await career.preferences();
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (_) =>
+        _PreferencesDialog(service: career, settings: settings));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _history(int id) async {
+    try {
+      final history = await career.applicationHistory(id);
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (dialog) => AlertDialog(
+        title: const Text('Application History'),
+        content: SizedBox(width: 360, child: ListView(shrinkWrap: true, children: [
+          if (history.isEmpty) const ListTile(title: Text('No status updates.')),
+          for (final record in history)
+            ListTile(title: Text('${record['new_status']}'), subtitle: Text('${record['created_at']}')),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Close'))],
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _apply(Map<String, dynamic> job) async {
+    if (profile?['is_profile_complete'] != true) {
+      await _openProfile();
+      return;
+    }
+    try {
+      final fields = await showDialog<Map<String, dynamic>>(
+        context: context, builder: (_) => _ApplicationDialog(title: job['title'].toString()));
+      if (fields == null || !mounted) return;
+      await service.applyForJob(vacancyId: job['id'] as int,
+        coverLetter: fields['cover_letter'] as String?, expectedSalary: fields['expected_salary'] as double?);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Application submitted successfully.')));
       await load();
@@ -115,15 +167,6 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
     }
   }
 
-  Future<void> _signOut() async {
-    await ApiService().signOut();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const _ApplicantSignedOutPlaceholder()),
-      (_) => false,
-    );
-  }
-
   List<Map<String, dynamic>> get filteredJobs {
     final q = query.trim().toLowerCase();
     return jobs.map((e) => Map<String, dynamic>.from(e as Map)).where((job) {
@@ -146,8 +189,10 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
           Text('Applicant Portal', style: TextStyle(fontSize: 11, fontWeight: FontWeight.normal)),
         ]),
         actions: [
+          if (selfHostedWeb) IconButton(tooltip: 'Notifications', onPressed: _notifications, icon: const Icon(Icons.notifications_outlined)),
+          if (selfHostedWeb) IconButton(tooltip: 'Job preferences', onPressed: _preferences, icon: const Icon(Icons.tune)),
           IconButton(tooltip: 'Refresh', onPressed: load, icon: const Icon(Icons.refresh)),
-          IconButton(tooltip: 'Sign out', onPressed: _signOut, icon: const Icon(Icons.logout)),
+          IconButton(tooltip: 'Sign out', onPressed: widget.onLogout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: RefreshIndicator(
@@ -239,6 +284,7 @@ class _ApplicantDashboardState extends State<ApplicantDashboard> {
                         title: j['title']?.toString() ?? 'Job Application',
                         department: j['department']?.toString() ?? '',
                         status: a['status']?.toString() ?? 'applied',
+                        onHistory: selfHostedWeb ? () => _history(a['id'] as int) : null,
                         onOpen: () => Navigator.of(context).push(MaterialPageRoute(
                           builder: (_) => ApplicantHrScreen(service: service, applicationId: a['id'] as int?, applicationTitle: j['title']?.toString()),
                         )),
@@ -388,11 +434,12 @@ class _JobCard extends StatelessWidget {
 }
 
 class _ApplicationCard extends StatelessWidget {
-  const _ApplicationCard({required this.title, required this.department, required this.status, required this.onOpen});
+  const _ApplicationCard({required this.title, required this.department, required this.status, required this.onOpen, this.onHistory});
   final String title;
   final String department;
   final String status;
   final VoidCallback onOpen;
+  final VoidCallback? onHistory;
 
   Color get statusColor {
     switch (status.toLowerCase()) {
@@ -417,6 +464,7 @@ class _ApplicationCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(children: [Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)), const SizedBox(width: 6), Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w800, fontSize: 12))]),
             ])),
+            if (onHistory != null) IconButton(onPressed: onHistory, icon: const Icon(Icons.history), tooltip: 'Status history'),
             IconButton(onPressed: onOpen, icon: const Icon(Icons.chat_bubble_outline), tooltip: 'Open HR conversation'),
           ]),
         ),
@@ -458,8 +506,114 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) => Card(child: Padding(padding: const EdgeInsets.all(28), child: Center(child: Column(children: [Icon(icon, size: 42, color: portalGreen), const SizedBox(height: 10), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(subtitle, textAlign: TextAlign.center)]))));
 }
 
-class _ApplicantSignedOutPlaceholder extends StatelessWidget {
-  const _ApplicantSignedOutPlaceholder();
+class _ApplicationDialog extends StatefulWidget {
+  const _ApplicationDialog({required this.title});
+  final String title;
+
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text('Signed out. Refresh the page to sign in again.')));
+  State<_ApplicationDialog> createState() => _ApplicationDialogState();
+}
+
+class _ApplicationDialogState extends State<_ApplicationDialog> {
+  final letter = TextEditingController();
+  final salary = TextEditingController();
+  final form = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    letter.dispose();
+    salary.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Apply for ${widget.title}'),
+    content: Form(key: form, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      TextFormField(controller: letter, maxLines: 3, decoration: const InputDecoration(labelText: 'Cover letter (optional)')),
+      TextFormField(controller: salary, keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Expected salary (optional)'),
+        validator: (raw) {
+          if (raw == null || raw.trim().isEmpty) return null;
+          final value = double.tryParse(raw.trim());
+          return value == null || !value.isFinite || value < 0 ? 'Enter a valid salary' : null;
+        }),
+    ])),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(onPressed: () {
+        if (!form.currentState!.validate()) return;
+        Navigator.pop(context, <String, dynamic>{
+          'cover_letter': letter.text.trim().isEmpty ? null : letter.text.trim(),
+          'expected_salary': double.tryParse(salary.text.trim()),
+        });
+      }, child: const Text('Apply')),
+    ],
+  );
+}
+
+class _PreferencesDialog extends StatefulWidget {
+  const _PreferencesDialog({required this.service, required this.settings});
+  final ApplicantCareerFeaturesService service;
+  final Map<String, dynamic>? settings;
+
+  @override
+  State<_PreferencesDialog> createState() => _PreferencesDialogState();
+}
+
+class _PreferencesDialogState extends State<_PreferencesDialog> {
+  late final department = field('preferred_department');
+  late final location = field('preferred_location');
+  late final type = field('preferred_employment_type');
+  late final salary = field('min_expected_salary');
+  late bool enabled = widget.settings?['receive_job_alerts'] == true;
+  bool saving = false;
+  String? error;
+
+  TextEditingController field(String key) =>
+      TextEditingController(text: widget.settings?[key]?.toString() ?? '');
+
+  @override
+  void dispose() {
+    department.dispose();
+    location.dispose();
+    type.dispose();
+    salary.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    final amount = double.tryParse(salary.text.trim());
+    if (salary.text.trim().isNotEmpty && (amount == null || !amount.isFinite || amount < 0)) {
+      setState(() => error = 'Enter a valid minimum salary.');
+      return;
+    }
+    setState(() { saving = true; error = null; });
+    try {
+      await widget.service.savePreferences(department: department.text, location: location.text,
+        employmentType: type.text, minSalary: amount, receiveJobAlerts: enabled);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() { saving = false; error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Job Preferences'),
+    content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      TextField(controller: department, decoration: const InputDecoration(labelText: 'Department')),
+      TextField(controller: location, decoration: const InputDecoration(labelText: 'Location')),
+      TextField(controller: type, decoration: const InputDecoration(labelText: 'Employment type')),
+      TextField(controller: salary, keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Minimum salary')),
+      SwitchListTile(title: const Text('Matching job alerts'), value: enabled,
+        onChanged: saving ? null : (value) => setState(() => enabled = value)),
+      if (error != null) Text(error!),
+    ])),
+    actions: [
+      TextButton(onPressed: saving ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(onPressed: saving ? null : save, child: const Text('Save')),
+    ],
+  );
 }

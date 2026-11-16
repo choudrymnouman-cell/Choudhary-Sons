@@ -21,6 +21,8 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
   List<dynamic> _projects = [];
   List<dynamic> _suppliers = [];
   List<dynamic> _assets = [];
+  List<dynamic> _materials = [], _orders = [], _clients = [];
+  int? _materialId, _orderId, _clientId;
   int? _projectId;
   int? _supplierId;
   int? _assetId;
@@ -36,16 +38,25 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
   Future<void> _loadLookups() async {
     try {
       final token = widget.session.token;
-      final results = await Future.wait([
-        _api.projects(token),
-        _api.suppliers(token),
-        _api.assets(token),
-      ]);
+      final datasets = switch (widget.type) {
+        'Delivery' => await Future.wait([_api.materials(token), _api.purchaseOrders(token)]),
+        'Invoice' => await Future.wait([_api.projects(token), if (selfHostedWeb) _api.clients(token)]),
+        'Purchase Order' => await Future.wait([_api.projects(token), _api.suppliers(token)]),
+        'Fuel Log' || 'Maintenance' => await Future.wait([_api.projects(token), _api.assets(token)]),
+        'Expense' || 'Asset' || 'Site Report' || 'Safety Incident' => [await _api.projects(token)],
+        _ => <List<dynamic>>[],
+      };
       if (!mounted) return;
       setState(() {
-        _projects = results[0];
-        _suppliers = results[1];
-        _assets = results[2];
+        if (widget.type == 'Delivery') {
+          _materials = datasets[0];
+          _orders = datasets[1];
+        } else if (datasets.isNotEmpty) {
+          _projects = datasets[0];
+          if (widget.type == 'Purchase Order') _suppliers = datasets[1];
+          if (widget.type == 'Fuel Log' || widget.type == 'Maintenance') _assets = datasets[1];
+          if (widget.type == 'Invoice' && selfHostedWeb) _clients = datasets[1];
+        }
       });
     } catch (e) {
       if (mounted) setState(() => _lookupError = e.toString().replaceFirst('Exception: ', ''));
@@ -137,6 +148,19 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
 
   List<Widget> _fields() {
     switch (widget.type) {
+      case 'Client':
+        return [_field('name', 'Client name')];
+      case 'Delivery':
+        return [
+          _dropdown(label: 'Purchase order', value: _orderId, required: true, items: _orders,
+            labelFor: (item) => item['po_number'].toString(), onChanged: (id) => setState(() => _orderId = id)),
+          _dropdown(label: 'Material', value: _materialId, required: true, items: _materials,
+            labelFor: (item) => item['name'].toString(), onChanged: (id) => setState(() => _materialId = id)),
+          _field('quantity', 'Quantity', number: true),
+          _field('unit_cost', 'Unit cost', number: true, optional: true),
+          _field('delivery_date', 'Delivery date (YYYY-MM-DD)', optional: true),
+          _field('challan_number', 'Challan number', optional: true),
+        ];
       case 'Supplier':
         return [
           _field('name', 'Supplier name'),
@@ -183,6 +207,9 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
         return [
           _field('invoice_number', 'Invoice number'),
           _projectDropdown(required: true),
+          if (selfHostedWeb && _clients.isNotEmpty)
+            _dropdown(label: 'Client', value: _clientId, required: false, items: _clients,
+              labelFor: (item) => item['name'].toString(), onChanged: (id) => setState(() => _clientId = id)),
           _field('invoice_date', 'Invoice date (YYYY-MM-DD)'),
           _field('due_date', 'Due date (YYYY-MM-DD)', optional: true),
           _field('amount', 'Amount', number: true),
@@ -260,6 +287,19 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
     try {
       final t = widget.session.token;
       switch (widget.type) {
+        case 'Client':
+          await _api.createClient(t, _text('name')!);
+          break;
+        case 'Delivery':
+          await _api.recordDelivery(t, {
+            'purchase_order_id': _orderId,
+            'material_id': _materialId,
+            'quantity': _text('quantity'),
+            'unit_cost': _text('unit_cost'),
+            if (_text('delivery_date') != null) 'delivery_date': _text('delivery_date'),
+            'challan_number': _text('challan_number'),
+          });
+          break;
         case 'Supplier':
           await _api.createSupplier(t, {'name': _text('name'), 'contact_person': _text('contact_person'), 'phone': _text('phone'), 'email': _text('email'), 'tax_number': _text('tax_number'), 'address': _text('address')});
           break;
@@ -273,7 +313,7 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
           await _api.createExpense(t, {'project_id': _projectId, 'category': _text('category'), 'description': _text('description'), 'amount': _num('amount'), 'expense_date': _text('expense_date'), 'vendor': _text('vendor'), 'payment_method': _text('payment_method'), 'reference': _text('reference')});
           break;
         case 'Invoice':
-          await _api.createInvoice(t, {'invoice_number': _text('invoice_number'), 'project_id': _projectId, 'client_id': null, 'invoice_date': _text('invoice_date'), 'due_date': _text('due_date'), 'amount': _num('amount'), 'tax_amount': _num('tax_amount'), 'paid_amount': _num('paid_amount'), 'notes': _text('notes')});
+          await _api.createInvoice(t, {'invoice_number': _text('invoice_number'), 'project_id': _projectId, 'client_id': _clientId, 'invoice_date': _text('invoice_date'), 'due_date': _text('due_date'), 'amount': _num('amount'), 'tax_amount': _num('tax_amount'), 'paid_amount': _num('paid_amount'), 'notes': _text('notes')});
           break;
         case 'Asset':
           await _api.createAsset(t, {'asset_code': _text('asset_code'), 'name': _text('name'), 'asset_type': _text('asset_type'), 'registration_number': _text('registration_number'), 'make_model': _text('make_model'), 'project_id': _projectId, 'current_meter': _num('current_meter'), 'notes': _text('notes')});

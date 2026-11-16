@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
+from app.api.recruitment import notify_matching_jobs
 from app.db.session import get_db
 from app.models.core import Employee, Project, User, UserRole
 from app.models.operations import ApplicationStatus, JobApplication, JobVacancy, LeaveRequest, LeaveStatus, PayrollRecord
@@ -31,7 +32,9 @@ class ProjectUpdate(BaseModel):
 
 
 @router.get("/projects")
-def list_projects(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role == UserRole.APPLICANT:
+        raise HTTPException(403, "Staff access required")
     return db.query(Project).order_by(Project.id.desc()).all()
 
 
@@ -80,6 +83,8 @@ def public_jobs(db: Session = Depends(get_db)):
 def create_job(payload: VacancyCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR))):
     job = JobVacancy(**payload.model_dump())
     db.add(job)
+    db.flush()
+    notify_matching_jobs(db, job)
     db.commit()
     db.refresh(job)
     return job
