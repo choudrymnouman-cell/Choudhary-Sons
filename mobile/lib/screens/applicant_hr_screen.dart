@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/applicant_portal_service.dart';
 
@@ -211,6 +212,16 @@ class _ApplicantHrScreenState extends State<ApplicantHrScreen> {
                     Text('Scheduled: ${m['scheduled_at'] ?? 'To be confirmed'}'),
                     Text('Status: ${m['status'] ?? 'scheduled'}'),
                     Text('Room: ${m['room_code'] ?? 'Will be assigned by HR'}'),
+                    if (m['meeting_url'] is String && (m['meeting_url'] as String).isNotEmpty)
+                      TextButton.icon(
+                        icon: const Icon(Icons.copy),
+                        label: const Text('Copy meeting link'),
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: m['meeting_url'] as String));
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Meeting link copied.')));
+                        },
+                      ),
                     if (m['notes'] != null) ...[const SizedBox(height: 6), Text(m['notes'].toString())],
                   ]),
                 ),

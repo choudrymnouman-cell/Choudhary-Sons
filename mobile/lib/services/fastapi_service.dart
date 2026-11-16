@@ -23,6 +23,51 @@ class FastApiService extends ApiService {
   }
 
   @override
+  Future<List<dynamic>> stockMovements(String token) =>
+      _getList('/api/v1/commercial/stock-movements', token);
+
+  @override
+  Future<List<dynamic>> deliveries(String token) =>
+      _getList('/api/v1/commercial/deliveries', token);
+
+  @override
+  Future<List<dynamic>> supplierPayments(String token) =>
+      _getList('/api/v1/commercial/supplier-payments', token);
+
+  @override
+  Future<List<dynamic>> clients(String token) =>
+      _getList('/api/v1/commercial/clients', token);
+
+  @override
+  Future<List<dynamic>> receivables(String token) =>
+      _getList('/api/v1/commercial/receivables', token);
+
+  @override
+  Future<void> recordStockMovement(String token, Map<String, dynamic> data) async {
+    await _postJson('/api/v1/commercial/stock-movements', token, data);
+  }
+
+  @override
+  Future<void> recordDelivery(String token, Map<String, dynamic> data) async {
+    await _postJson('/api/v1/commercial/deliveries', token, data);
+  }
+
+  @override
+  Future<void> recordSupplierPayment(String token, Map<String, dynamic> data) async {
+    await _postJson('/api/v1/commercial/supplier-payments', token, data);
+  }
+
+  @override
+  Future<void> createClient(String token, String name) async {
+    await _postJson('/api/v1/commercial/clients', token, {'name': name});
+  }
+
+  @override
+  Future<void> receiveInvoice(String token, Map<String, dynamic> invoice, double amount) async {
+    await _postJson('/api/v1/commercial/invoices/${invoice['id']}/receipts', token, {'amount': amount});
+  }
+
+  @override
   Future<AuthSession?> restoreSession() async {
     final token = _sessionToken;
     if (token == null) return null;

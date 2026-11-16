@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'fastapi_service.dart';
+part 'recruitment_http.dart';
 
 const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 
@@ -38,6 +39,53 @@ class ApiService {
 
   Future<void> updateBoqProgress(String token, int itemId, num quantity) async {
     await _db.from('boq_items').update({'completed_quantity': quantity}).eq('id', itemId);
+  }
+
+  Future<List<dynamic>> stockMovements(String token) async =>
+      List<dynamic>.from(await _db.from('material_stock_movements').select('*, materials(name,unit), projects(name,code)').order('created_at', ascending: false).limit(100));
+
+  Future<List<dynamic>> deliveries(String token) async =>
+      List<dynamic>.from(await _db.from('purchase_deliveries').select('*, purchase_orders(po_number), materials(name,unit)').order('created_at',ascending:false).limit(100));
+
+  Future<List<dynamic>> supplierPayments(String token) async =>
+      List<dynamic>.from(await _db.from('supplier_payments').select('*, suppliers(name), purchase_orders(po_number)').order('created_at',ascending:false).limit(100));
+
+  Future<List<dynamic>> clients(String token) async =>
+      List<dynamic>.from(await _db.from('clients').select().order('name'));
+
+  Future<List<dynamic>> receivables(String token) async =>
+      List<dynamic>.from(await _db.from('client_invoices').select('*, clients(name), projects(name,code)').order('invoice_date',ascending:false));
+
+  Future<void> recordStockMovement(String token, Map<String, dynamic> data) async {
+    await _db.rpc('record_material_stock_movement', params: {
+      'p_material_id': data['material_id'],
+      'p_project_id': data['project_id'],
+      'p_type': data['movement_type'],
+      'p_quantity': data['quantity'],
+      'p_unit_cost': data['unit_cost'] ?? 0,
+      'p_reference': data['reference'],
+      'p_notes': data['notes'],
+    });
+  }
+
+  Future<void> recordDelivery(String token, Map<String, dynamic> data) =>
+      throw UnsupportedError('Delivery recording requires the self-hosted backend.');
+
+  Future<void> recordSupplierPayment(String token, Map<String, dynamic> data) async {
+    await _db.from('supplier_payments').insert(data);
+  }
+
+  Future<void> createClient(String token, String name) async {
+    await _db.from('clients').insert({'name': name});
+  }
+
+  Future<void> receiveInvoice(String token, Map<String, dynamic> invoice, double amount) async {
+    double number(dynamic value) => double.tryParse(value.toString()) ?? 0;
+    final paid = number(invoice['paid_amount']) + amount;
+    await _db.from('client_invoices').update({
+      'paid_amount': paid,
+      'status': paid >= number(invoice['total_amount']) ? 'paid' : 'partial',
+    }).eq('id', invoice['id']);
   }
 
   SupabaseClient get _db => Supabase.instance.client;

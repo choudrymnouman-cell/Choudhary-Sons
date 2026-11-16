@@ -2,7 +2,10 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'api_service.dart';
+
 class ApplicantPortalService {
+  final _http = RecruitmentHttp();
   static const String _webRedirect = 'https://choudrymnouman-cell.github.io/Choudhary-Sons/';
 
   SupabaseClient get _db => Supabase.instance.client;
@@ -14,6 +17,10 @@ class ApplicantPortalService {
   }
 
   Future<void> signUp({required String email, required String password, required String fullName, String? phone}) async {
+    if (selfHostedWeb) {
+      await _http.signup({'email':email, 'password':password, 'full_name':fullName, 'phone':phone});
+      return;
+    }
     final response = await _db.auth.signUp(
       email: email.trim(),
       password: password,
@@ -38,6 +45,7 @@ class ApplicantPortalService {
   }
 
   Future<void> ensureApplicantRole() async {
+    if (selfHostedWeb) return;
     await _db.rpc('register_as_applicant', params: {
       'p_full_name': (_user.userMetadata?['full_name'] ?? '').toString(),
       'p_phone': _user.userMetadata?['phone']?.toString(),
@@ -49,6 +57,7 @@ class ApplicantPortalService {
   }
 
   Future<Map<String, dynamic>> ensureApplicantProfile({required String fullName, String? phone}) async {
+    if (selfHostedWeb) return (await myProfile())!;
     final existing = await myProfile();
     if (existing != null) return existing;
     final body = <String, dynamic>{
@@ -63,12 +72,14 @@ class ApplicantPortalService {
   }
 
   Future<Map<String, dynamic>?> myProfile() async {
+    if (selfHostedWeb) return _http.row('profile');
     final rows = await _db.from('applicant_profiles').select().eq('user_id', _user.id).limit(1);
     if ((rows as List).isEmpty) return null;
     return Map<String, dynamic>.from(rows.first as Map);
   }
 
   Future<Map<String, dynamic>> upsertProfile(Map<String, dynamic> values) async {
+    if (selfHostedWeb) return _http.put('profile', values);
     final body = <String, dynamic>{'user_id': _user.id, ...values};
     body.removeWhere((key, value) => value == null);
     body['is_profile_complete'] = _isComplete(body);
@@ -100,6 +111,7 @@ class ApplicantPortalService {
   }
 
   Future<String> uploadApplicantFile({required String kind, required String fileName, required Uint8List bytes}) async {
+    if (selfHostedWeb) return _http.upload(kind, fileName, bytes);
     final safe = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final path = '${_user.id}/$kind/${DateTime.now().millisecondsSinceEpoch}_$safe';
     await _db.storage.from('applicant-documents').uploadBinary(path, bytes, fileOptions: const FileOptions(upsert: true));
@@ -108,16 +120,20 @@ class ApplicantPortalService {
 
   Future<String> signedApplicantFileUrl(String path) => _db.storage.from('applicant-documents').createSignedUrl(path, 600);
 
-  Future<List<dynamic>> openJobs() async => List<dynamic>.from(
+  Future<List<dynamic>> openJobs() async => selfHostedWeb ? ApiService().jobs() : List<dynamic>.from(
     await _db.from('job_vacancies').select().eq('is_open', true).order('created_at', ascending: false),
   );
 
-  Future<List<dynamic>> myApplications() async => List<dynamic>.from(
+  Future<List<dynamic>> myApplications() async => selfHostedWeb ? _http.rows('applications/me') : List<dynamic>.from(
     await _db.from('job_applications').select('*, job_vacancies(title,department,location,employment_type)')
       .eq('applicant_user_id', _user.id).order('created_at', ascending: false),
   );
 
   Future<void> applyForJob({required int vacancyId, String? coverLetter, double? expectedSalary}) async {
+    if (selfHostedWeb) {
+      await _http.post('applications', {'vacancy_id':vacancyId, 'cover_letter':coverLetter, 'expected_salary':expectedSalary});
+      return;
+    }
     final profile = await myProfile();
     if (profile == null || profile['is_profile_complete'] != true) {
       throw Exception('Complete your profile, profile photo and CNIC images before applying.');
@@ -141,11 +157,12 @@ class ApplicantPortalService {
     });
   }
 
-  Future<List<dynamic>> conversations() async => List<dynamic>.from(
+  Future<List<dynamic>> conversations() async => selfHostedWeb ? _http.rows('conversations') : List<dynamic>.from(
     await _db.from('hr_conversations').select().order('updated_at', ascending: false),
   );
 
   Future<Map<String, dynamic>> openConversation({int? applicationId, String subject = 'General HR Support'}) async {
+    if (selfHostedWeb) return _http.post('conversations', {'application_id':applicationId, 'subject':subject});
     dynamic query = _db.from('hr_conversations').select().eq('applicant_user_id', _user.id);
     if (applicationId == null) {
       query = query.isFilter('job_application_id', null);
@@ -162,11 +179,15 @@ class ApplicantPortalService {
     return Map<String, dynamic>.from(await _db.from('hr_conversations').insert(payload).select().single());
   }
 
-  Future<List<dynamic>> messages(int conversationId) async => List<dynamic>.from(
+  Future<List<dynamic>> messages(int conversationId) async => selfHostedWeb ? _http.rows('conversations/$conversationId/messages') : List<dynamic>.from(
     await _db.from('hr_messages').select().eq('conversation_id', conversationId).order('created_at'),
   );
 
   Future<void> sendMessage(int conversationId, String message) async {
+    if (selfHostedWeb) {
+      await _http.post('conversations/$conversationId/messages', {'message':message});
+      return;
+    }
     final text = message.trim();
     if (text.isEmpty) return;
     await _db.from('hr_messages').insert({
@@ -178,7 +199,7 @@ class ApplicantPortalService {
       .eq('id', conversationId);
   }
 
-  Future<List<dynamic>> myInterviews() async => List<dynamic>.from(
+  Future<List<dynamic>> myInterviews() async => selfHostedWeb ? _http.rows('interviews/me') : List<dynamic>.from(
     await _db.from('interviews').select('*, job_applications(applicant_name, job_vacancies(title))')
       .eq('applicant_user_id', _user.id).order('scheduled_at'),
   );

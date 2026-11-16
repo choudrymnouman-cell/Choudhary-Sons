@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import attendance, auth, commercial, documents, employees, field_ops, operations
+from app.api import attendance, auth, commercial, documents, employees, field_ops, operations, recruitment, trade
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.models import commercial as commercial_models  # noqa: F401
@@ -35,7 +35,9 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
 app.include_router(attendance.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
+app.include_router(recruitment.router, prefix="/api/v1")
 app.include_router(commercial.router, prefix="/api/v1")
+app.include_router(trade.router, prefix="/api/v1")
 app.include_router(field_ops.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 

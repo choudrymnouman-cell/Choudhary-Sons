@@ -280,7 +280,7 @@ class _LoginState extends State<LoginScreen> {
                           : const Text('Sign In'),
                     ),
                   ),
-                  if (!selfHostedWeb && role == 'Applicant') ...[
+                  if (selfHostedWeb || role == 'Applicant') ...[
                     const SizedBox(height: 10),
                     TextButton(
                       onPressed: () {
@@ -337,7 +337,9 @@ class _ApplicantSignupState extends State<ApplicantSignupScreen> {
       );
       if (!mounted) return;
       setState(
-        () => message = 'Account created. Check your email and confirm your address, then return and sign in as Applicant.',
+        () => message = selfHostedWeb
+            ? 'Account created. Return to sign in.'
+            : 'Account created. Check your email and confirm your address, then return and sign in as Applicant.',
       );
     } catch (e) {
       if (mounted) setState(() => message = e.toString());
@@ -410,14 +412,6 @@ class RoleHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final role = session.role.toLowerCase();
     if (role == 'applicant') {
-      if (selfHostedWeb) {
-        return Scaffold(
-          appBar: AppBar(title: const Text('Applicant Portal'), actions: [
-            TextButton(onPressed: onLogout, child: const Text('Sign out')),
-          ]),
-          body: const Center(child: Text('Applicant access is unavailable in this private test build.')),
-        );
-      }
       return ApplicantDashboard(session: session, onLogout: onLogout);
     }
     if (role == 'employee')
@@ -517,9 +511,7 @@ class ManagementHome extends StatelessWidget {
           () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => selfHostedWeb
-                  ? ManagementListScreen(session: session, type: 'Recruitment')
-                  : RecruitmentPipelineScreen(session: session),
+              builder: (_) => RecruitmentPipelineScreen(session: session),
             ),
           ),
         ),

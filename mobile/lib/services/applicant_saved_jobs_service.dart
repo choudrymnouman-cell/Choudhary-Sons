@@ -1,6 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'api_service.dart';
+
 class ApplicantSavedJobsService {
+  final _http = RecruitmentHttp();
   SupabaseClient get _db => Supabase.instance.client;
 
   String get _userId {
@@ -9,7 +12,7 @@ class ApplicantSavedJobsService {
     return user.id;
   }
 
-  Future<List<dynamic>> savedJobs() async => List<dynamic>.from(
+  Future<List<dynamic>> savedJobs() async => selfHostedWeb ? _http.rows('saved-jobs') : List<dynamic>.from(
         await _db
             .from('saved_jobs')
             .select('*, job_vacancies(*)')
@@ -18,6 +21,10 @@ class ApplicantSavedJobsService {
       );
 
   Future<void> saveJob(int vacancyId) async {
+    if (selfHostedWeb) {
+      await _http.put('saved-jobs/$vacancyId', {});
+      return;
+    }
     await _db.from('saved_jobs').upsert({
       'applicant_user_id': _userId,
       'vacancy_id': vacancyId,
@@ -25,6 +32,7 @@ class ApplicantSavedJobsService {
   }
 
   Future<void> unsaveJob(int vacancyId) async {
+    if (selfHostedWeb) return _http.delete('saved-jobs/$vacancyId');
     await _db
         .from('saved_jobs')
         .delete()

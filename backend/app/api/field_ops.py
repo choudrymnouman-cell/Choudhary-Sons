@@ -277,6 +277,8 @@ def create_notice(payload: NoticeCreate, db: Session = Depends(get_db), user: Us
 
 @router.get("/notices")
 def list_notices(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role == UserRole.APPLICANT:
+        raise HTTPException(403, "Staff access required")
     query = db.query(Notice).filter(Notice.is_active.is_(True))
     return query.order_by(Notice.created_at.desc()).limit(50).all()
 
