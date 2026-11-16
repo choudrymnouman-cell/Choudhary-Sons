@@ -19,16 +19,18 @@ const appSurface = Color(0xFFF5F8F6);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: const String.fromEnvironment(
-      'SUPABASE_URL',
-      defaultValue: 'https://lvvltukzpqtkmpcdsoxq.supabase.co',
-    ),
-    publishableKey: const String.fromEnvironment(
-      'SUPABASE_PUBLISHABLE_KEY',
-      defaultValue: 'sb_publishable_7FZo2WyCepTAWlqPCkdoRg_QpBlpXdC',
-    ),
-  );
+  if (!selfHostedWeb) {
+    await Supabase.initialize(
+      url: const String.fromEnvironment(
+        'SUPABASE_URL',
+        defaultValue: 'https://lvvltukzpqtkmpcdsoxq.supabase.co',
+      ),
+      publishableKey: const String.fromEnvironment(
+        'SUPABASE_PUBLISHABLE_KEY',
+        defaultValue: 'sb_publishable_7FZo2WyCepTAWlqPCkdoRg_QpBlpXdC',
+      ),
+    );
+  }
   runApp(const ChoudharySonsApp());
 }
 
@@ -227,7 +229,7 @@ class _LoginState extends State<LoginScreen> {
                   ),
                   const Text('Civil Services • Contractor • Supplier'),
                   const SizedBox(height: 22),
-                  SegmentedButton<String>(
+                  if (!selfHostedWeb) SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(
                         value: 'Applicant',
@@ -278,7 +280,7 @@ class _LoginState extends State<LoginScreen> {
                           : const Text('Sign In'),
                     ),
                   ),
-                  if (role == 'Applicant') ...[
+                  if (!selfHostedWeb && role == 'Applicant') ...[
                     const SizedBox(height: 10),
                     TextButton(
                       onPressed: () {
@@ -407,8 +409,17 @@ class RoleHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final role = session.role.toLowerCase();
-    if (role == 'applicant')
+    if (role == 'applicant') {
+      if (selfHostedWeb) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Applicant Portal'), actions: [
+            TextButton(onPressed: onLogout, child: const Text('Sign out')),
+          ]),
+          body: const Center(child: Text('Applicant access is unavailable in this private test build.')),
+        );
+      }
       return ApplicantDashboard(session: session, onLogout: onLogout);
+    }
     if (role == 'employee')
       return EmployeePortalHome(session: session, onLogout: onLogout);
     return ManagementHome(session: session, onLogout: onLogout);
@@ -506,7 +517,9 @@ class ManagementHome extends StatelessWidget {
           () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => RecruitmentPipelineScreen(session: session),
+              builder: (_) => selfHostedWeb
+                  ? ManagementListScreen(session: session, type: 'Recruitment')
+                  : RecruitmentPipelineScreen(session: session),
             ),
           ),
         ),

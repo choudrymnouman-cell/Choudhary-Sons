@@ -22,6 +22,8 @@ services:
       DATABASE_URL: postgresql+psycopg://choudhary:choudhary_dev_password@db:5432/choudhary_sons
       SECRET_KEY: local-dev-only-change-before-deployment
       ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+    volumes:
+      - choudhary_uploads:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -30,3 +32,4 @@ services:
 
 volumes:
   choudhary_pgdata:
+  choudhary_uploads:

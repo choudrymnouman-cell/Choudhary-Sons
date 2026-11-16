@@ -30,6 +30,20 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     if (changed == true) _refresh();
   }
 
+  Future<void> _download(int id, String name) async {
+    try {
+      final bytes = await _api.downloadLocalDocument(widget.session.token, id);
+      if (!mounted) return;
+      await FilePicker.platform.saveFile(fileName: name, bytes: bytes);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not download document: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,6 +80,16 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                     : 'Employee #${item['employee_id']}';
                 return Card(
                   child: ListTile(
+                    trailing: selfHostedWeb
+                        ? IconButton(
+                            tooltip: 'Download',
+                            onPressed: () => _download(
+                              item['id'] as int,
+                              (item['file_url'] as String).split('/').last,
+                            ),
+                            icon: const Icon(Icons.download),
+                          )
+                        : null,
                     leading: const CircleAvatar(child: Icon(Icons.description_outlined)),
                     title: Text((item['title'] ?? 'Document').toString()),
                     subtitle: Text('${item['document_type'] ?? 'file'} • $target${item['expiry_date'] != null ? ' • Expires ${item['expiry_date']}' : ''}'),

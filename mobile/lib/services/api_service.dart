@@ -1,6 +1,13 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+part 'fastapi_service.dart';
+
+const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 
 class AuthSession {
   final String token;
@@ -15,6 +22,13 @@ class AuthSession {
 }
 
 class ApiService {
+  factory ApiService() => selfHostedWeb ? FastApiService() : ApiService._();
+
+  ApiService._();
+
+  Future<Uint8List> downloadLocalDocument(String token, int id) =>
+      throw UnsupportedError('Local documents require the self-hosted backend.');
+
   SupabaseClient get _db => Supabase.instance.client;
   User get _user {
     final user = _db.auth.currentUser;

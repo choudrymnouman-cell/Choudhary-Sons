@@ -22,3 +22,11 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Build Flutter Web
         run: flutter build web --release --base-href "/Choudhary-Sons/"
+      - name: Build self-hosted Flutter Web
+        run: flutter build web --release --base-href "/web/" --dart-define=SELF_HOSTED_WEB=true
+      - name: Upload private-test web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: choudhary-self-hosted-web
+          path: mobile/build/web
+          if-no-files-found: error

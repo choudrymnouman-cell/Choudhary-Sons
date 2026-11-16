@@ -241,7 +241,12 @@ async def upload_document(
         uploaded_by=user.id,
     )
     db.add(document)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        stored_path.unlink(missing_ok=True)
+        raise
     db.refresh(document)
     return document
 
