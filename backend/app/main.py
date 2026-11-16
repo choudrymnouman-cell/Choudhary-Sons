@@ -1,8 +1,5 @@
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api import attendance, auth, commercial, documents, employees, field_ops, operations
 from app.core.config import settings
@@ -17,9 +14,6 @@ from app.models import core, operations as operations_models  # noqa: F401
 if settings.environment.lower() == "development":
     Base.metadata.create_all(bind=engine)
 
-upload_dir = Path(settings.upload_dir)
-upload_dir.mkdir(parents=True, exist_ok=True)
-
 app = FastAPI(
     title=settings.app_name,
     version="0.9.0",
@@ -33,9 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Local-disk uploads remain available as a development fallback.
-app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
