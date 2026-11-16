@@ -29,6 +29,17 @@ class ApiService {
   Future<Uint8List> downloadLocalDocument(String token, int id) =>
       throw UnsupportedError('Local documents require the self-hosted backend.');
 
+  Future<List<dynamic>> boqItems(String token, int projectId) async =>
+      await _db.from('boq_items').select().eq('project_id', projectId).order('id');
+
+  Future<void> addBoqItem(String token, Map<String, dynamic> item) async {
+    await _db.from('boq_items').insert(item);
+  }
+
+  Future<void> updateBoqProgress(String token, int itemId, num quantity) async {
+    await _db.from('boq_items').update({'completed_quantity': quantity}).eq('id', itemId);
+  }
+
   SupabaseClient get _db => Supabase.instance.client;
   User get _user {
     final user = _db.auth.currentUser;

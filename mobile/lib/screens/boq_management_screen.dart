@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/api_service.dart';
 
@@ -13,7 +12,6 @@ class BoqManagementScreen extends StatefulWidget {
 
 class _BoqManagementScreenState extends State<BoqManagementScreen> {
   final _api = ApiService();
-  final _db = Supabase.instance.client;
   bool _loading = true;
   String? _error;
   List<dynamic> _projects = [], _items = [];
@@ -36,8 +34,9 @@ class _BoqManagementScreenState extends State<BoqManagementScreen> {
 
   Future<void> _loadItems() async {
     if (_projectId == null) { if (mounted) setState(() => _items = []); return; }
-    final rows = await _db.from('boq_items').select().eq('project_id', _projectId!).order('id');
-    if (mounted) setState(() => _items = List<dynamic>.from(rows));
+    final projectId = _projectId!;
+    final rows = await _api.boqItems(widget.session.token, projectId);
+    if (mounted && _projectId == projectId) setState(() => _items = rows);
   }
 
   double _num(dynamic v) => v is num ? v.toDouble() : double.tryParse('$v') ?? 0;
@@ -58,7 +57,7 @@ class _BoqManagementScreenState extends State<BoqManagementScreen> {
       actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save'))],
     ));
     if (ok != true || desc.text.trim().isEmpty || unit.text.trim().isEmpty) return;
-    await _db.from('boq_items').insert({'project_id': _projectId, 'item_code': code.text.trim().isEmpty ? null : code.text.trim(), 'description': desc.text.trim(), 'unit': unit.text.trim(), 'quantity': _num(qty.text), 'unit_rate': _num(rate.text), 'completed_quantity': 0});
+    await _api.addBoqItem(widget.session.token, {'project_id': _projectId, 'item_code': code.text.trim().isEmpty ? null : code.text.trim(), 'description': desc.text.trim(), 'unit': unit.text.trim(), 'quantity': _num(qty.text), 'unit_rate': _num(rate.text), 'completed_quantity': 0});
     await _loadItems();
   }
 
@@ -71,7 +70,7 @@ class _BoqManagementScreenState extends State<BoqManagementScreen> {
     ));
     if (ok != true) return;
     final value = _num(controller.text).clamp(0, _num(item['quantity']));
-    await _db.from('boq_items').update({'completed_quantity': value}).eq('id', item['id']);
+    await _api.updateBoqProgress(widget.session.token, item['id'] as int, value);
     await _loadItems();
   }
 

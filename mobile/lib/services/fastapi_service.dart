@@ -7,6 +7,22 @@ class FastApiService extends ApiService {
   static const baseUrl = String.fromEnvironment('API_BASE_URL');
 
   @override
+  Future<List<dynamic>> boqItems(String token, int projectId) =>
+      _getList('/api/v1/commercial/boq/$projectId', token);
+
+  @override
+  Future<void> addBoqItem(String token, Map<String, dynamic> item) async {
+    await _postJson('/api/v1/commercial/boq', token, item);
+  }
+
+  @override
+  Future<void> updateBoqProgress(String token, int itemId, num quantity) async {
+    await _patchJson('/api/v1/commercial/boq/$itemId/progress', token, {
+      'completed_quantity': quantity,
+    });
+  }
+
+  @override
   Future<AuthSession?> restoreSession() async {
     final token = _sessionToken;
     if (token == null) return null;
