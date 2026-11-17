@@ -235,3 +235,25 @@ def test_owner_approvals_gate_delivery_payment_and_project_signoff(session):
     projects = client.get(f"{API}/projects", headers=owner).json()
     assert next(row for row in projects if row["id"] == project["id"])["status"] == "completed"
     client.put(f"{owner_api}/approval-settings", headers=owner, json={})
+
+
+def test_owner_tender_deadline_margin_and_status(session):
+    client, owner, tag = session
+    path = f"{API}/owner/tenders"
+    data = {
+        "reference": f"bid-{tag}", "title": "Site works", "authority": "Procurement office",
+        "deadline": "2026-12-31", "bid_amount": "1000.00", "estimated_cost": "750.00",
+    }
+    row = create(client, path, owner, data)
+    assert row["reference"] == f"BID-{tag.upper()}"
+    assert row["estimated_margin_percent"] == 25
+    assert row["estimated_profit"] == 250
+    create(client, path, owner, {**data, "reference": data["reference"].upper()}, 409)
+    changed = client.put(f"{path}/{row['id']}", headers=owner, json={**data, "status": "submitted"})
+    assert changed.status_code == 200 and changed.json()["status"] == "submitted"
+    assert any(item["id"] == row["id"] for item in client.get(f"{path}?status=submitted", headers=owner).json())
+    assert all(item["id"] != row["id"] for item in client.get(f"{path}?status=upcoming", headers=owner).json())
+    staff = create(client, f"{API}/owner/accounts", owner, {
+        "email": f"tender-staff-{tag}@example.com", "full_name": "Staff member", "role": "employee", "password": PASSWORD,
+    })
+    assert client.get(path, headers=login(client, staff["email"])).status_code == 403

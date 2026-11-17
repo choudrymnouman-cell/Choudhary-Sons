@@ -34,6 +34,19 @@ class OwnerHttp {
     await _api._postJson('/api/v1/owner/approvals/$id/$decision', token, {});
   }
 
+  Future<List<Map<String, dynamic>>> tenders() async =>
+      (await _api._getList('/api/v1/owner/tenders', token)).cast<Map<String, dynamic>>();
+
+  Future<void> saveTender(Map<String, dynamic> body, {int? id}) async {
+    const path = '/api/v1/owner/tenders';
+    if (id == null) {
+      await _api._postJson(path, token, body);
+      return;
+    }
+    _api._body(await http.put(_api._uri('$path/$id'),
+        headers: _api._authHeaders(token), body: jsonEncode(body)));
+  }
+
   Future<void> saveAccount(Map<String, dynamic> body, {int? id}) async {
     if (id == null) {
       await _api._postJson('/api/v1/owner/accounts', token, body);

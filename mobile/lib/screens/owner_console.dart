@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import 'tender_register.dart';
 
 class OwnerConsole extends StatefulWidget {
   const OwnerConsole({super.key, required this.session});
@@ -66,7 +67,11 @@ class _OwnerConsoleState extends State<OwnerConsole> {
     child: Scaffold(
       appBar: AppBar(
         title: const Text('Owner Console'),
-        actions: [IconButton(tooltip: 'Refresh', onPressed: refresh, icon: const Icon(Icons.refresh))],
+        actions: [
+          IconButton(tooltip: 'Tender register', icon: const Icon(Icons.assignment_outlined),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TenderRegister(api: api)))),
+          IconButton(tooltip: 'Refresh', onPressed: refresh, icon: const Icon(Icons.refresh)),
+        ],
         bottom: const TabBar(tabs: [
           Tab(text: 'Overview'), Tab(text: 'Approvals'), Tab(text: 'Accounts'), Tab(text: 'Activity'),
         ]),
