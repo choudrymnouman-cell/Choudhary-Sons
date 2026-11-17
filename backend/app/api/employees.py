@@ -68,8 +68,10 @@ def list_employees(
 def create_employee(
     payload: EmployeeCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
+    actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
 ):
+    if payload.role != UserRole.EMPLOYEE and actor.role != UserRole.OWNER:
+        raise HTTPException(403, "Only an owner can grant staff permissions")
     if db.scalar(select(User).where(User.email == payload.email)):
         raise HTTPException(status_code=409, detail="Email already exists")
     if db.scalar(select(Employee).where(Employee.employee_code == payload.employee_code)):
@@ -112,7 +114,9 @@ def update_employee(
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    data = payload.model_dump(exclude_unset=True)
+    if employee.user.role == UserRole.OWNER or payload.role is not None:
+        raise HTTPException(403, "Use the owner console to manage account access")
+    data = payload.model_dump(exclude_unset=True, exclude={"role"})
     for key in ("full_name", "phone", "role"):
         if key in data:
             setattr(employee.user, key, data.pop(key))
@@ -127,12 +131,17 @@ def update_employee(
 def deactivate_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
+    actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR)),
 ):
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if employee.user.role == UserRole.OWNER or (
+        employee.user.role != UserRole.EMPLOYEE and actor.role != UserRole.OWNER
+    ):
+        raise HTTPException(403, "Use the owner console to manage account access")
     employee.user.is_active = False
+    employee.user.token_version += 1
     db.commit()
     return {"id": employee.id, "message": "Employee deactivated"}
 

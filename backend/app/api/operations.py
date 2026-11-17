@@ -4,10 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from sqlalchemy import select
+
+from app.api.approvals import queue_request
 from app.api.deps import get_current_user, require_roles
 from app.api.recruitment import notify_matching_jobs
 from app.db.session import get_db
-from app.models.core import Employee, Project, User, UserRole
+from app.models.core import Employee, Project, ProjectStatus, User, UserRole
+from app.models.ownership import ApprovalRequest
 from app.models.operations import ApplicationStatus, JobApplication, JobVacancy, LeaveRequest, LeaveStatus, PayrollRecord
 
 router = APIRouter(tags=["operations"])
@@ -26,7 +30,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     site_address: str | None = None
     contract_value: float | None = None
-    status: str | None = None
+    status: ProjectStatus | None = None
     start_date: date | None = None
     end_date: date | None = None
 
@@ -50,18 +54,30 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
 
 
 @router.patch("/projects/{project_id}")
-def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
-    project = db.get(Project, project_id)
+def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db), actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+    project = db.get(Project, project_id, with_for_update=True)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("end_date") and data.get("start_date") and data["end_date"] < data["start_date"]:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    awaiting_signoff = data.get("status") == ProjectStatus.COMPLETED and project.status != ProjectStatus.COMPLETED
+    if awaiting_signoff:
+        if project.status == ProjectStatus.CANCELLED:
+            raise HTTPException(409, "Cancelled projects cannot be signed off")
+        data.pop("status")
+        pending = db.scalar(select(ApprovalRequest.id).where(
+            ApprovalRequest.kind == "project_signoff", ApprovalRequest.record_id == project.id,
+            ApprovalRequest.status == "pending",
+        ))
+        if pending is None:
+            queue_request(db, kind="project_signoff", user_id=actor.id,
+                          description=f"Sign off project {project.code}", record_id=project.id)
     for key, value in data.items():
         setattr(project, key, value)
     db.commit()
     db.refresh(project)
-    return project
+    return {**vars(project), "approval_pending": True} if awaiting_signoff else project
 
 
 class VacancyCreate(BaseModel):

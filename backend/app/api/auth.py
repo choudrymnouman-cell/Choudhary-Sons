@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == form.username))
     if user is None and form.username.lower() != form.username:
         user = db.scalar(select(User).where(User.email == form.username.lower()))
@@ -20,7 +20,8 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is inactive")
 
-    token = create_access_token(str(user.id), user.role.value)
+    request.state.audit_actor_id = user.id
+    token = create_access_token(str(user.id), user.role.value, token_version=user.token_version)
     return {
         "access_token": token,
         "token_type": "bearer",

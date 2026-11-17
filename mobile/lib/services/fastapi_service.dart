@@ -53,8 +53,9 @@ class FastApiService extends ApiService {
   }
 
   @override
-  Future<void> recordSupplierPayment(String token, Map<String, dynamic> data) async {
-    await _postJson('/api/v1/commercial/supplier-payments', token, data);
+  Future<bool> recordSupplierPayment(String token, Map<String, dynamic> data) async {
+    final result = await _postJson('/api/v1/commercial/supplier-payments', token, data);
+    return result['status'] == 'pending_approval';
   }
 
   @override

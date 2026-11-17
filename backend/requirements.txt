@@ -11,3 +11,5 @@ email-validator==2.2.0
 alembic==1.16.4
 httpx==0.28.1
 pytest==8.4.1
+
+tzdata==2025.2

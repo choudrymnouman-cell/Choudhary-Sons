@@ -262,8 +262,9 @@ class _EditRecordScreenState extends State<EditRecordScreen> {
     setState(() => _saving = true);
     try {
       final id = widget.record['id'] as int;
+      var statusMessage = 'Changes saved';
       if (widget.type == 'Projects') {
-        await _api.updateProject(widget.session.token, id, {
+        final updated = await _api.updateProject(widget.session.token, id, {
           'name': _controller('name').text.trim(),
           'description': _controller('description').text.trim().isEmpty ? null : _controller('description').text.trim(),
           'site_address': _controller('site_address').text.trim().isEmpty ? null : _controller('site_address').text.trim(),
@@ -272,6 +273,7 @@ class _EditRecordScreenState extends State<EditRecordScreen> {
           'end_date': _controller('end_date').text.trim().isEmpty ? null : _controller('end_date').text.trim(),
           'status': _projectStatus,
         });
+        if (updated['approval_pending'] == true) statusMessage = 'Project sign-off sent for owner approval.';
       } else if (widget.type == 'Employees') {
         await _api.updateEmployee(widget.session.token, id, {
           'full_name': _controller('full_name').text.trim(),
@@ -286,7 +288,7 @@ class _EditRecordScreenState extends State<EditRecordScreen> {
       }
       if (!mounted) return;
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Changes saved')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(statusMessage)));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
     } finally {
