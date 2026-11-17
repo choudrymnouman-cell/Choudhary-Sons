@@ -155,7 +155,7 @@ def overview(
     receipts = db.execute(
         select(func.date(InvoiceReceipt.created_at), func.sum(InvoiceReceipt.amount))
         .group_by(func.date(InvoiceReceipt.created_at))
-        .where(func.date(InvoiceReceipt.created_at).between(start.isoformat(), end.isoformat()))
+        .where(func.date(InvoiceReceipt.created_at).between(start, end))
     )
     payments = db.execute(
         select(SupplierPayment.payment_date, func.sum(SupplierPayment.amount))
