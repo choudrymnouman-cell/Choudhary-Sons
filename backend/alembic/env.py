@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.db.session import Base
 from app.models import commercial as commercial_models  # noqa: F401
 from app.models import field_ops as field_ops_models  # noqa: F401
-from app.models import core, operations as operations_models, recruitment, trade  # noqa: F401
+from app.models import core, operations as operations_models, ownership, recruitment, trade  # noqa: F401
 
 config = context.config
 config.set_main_option('sqlalchemy.url', settings.sqlalchemy_database_url.replace('%', '%%'))

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.approvals import queue_request, required_by_limit
 from app.api.commercial import require_management
 from app.db.session import get_db
 from app.models.commercial import ClientInvoice, Material, PurchaseOrder, Supplier
@@ -122,8 +123,8 @@ def create_delivery(payload: DeliveryInput, db: Session = Depends(get_db), user:
     order = db.get(PurchaseOrder, payload.purchase_order_id)
     if order is None:
         raise HTTPException(404, "Purchase order not found")
-    if order.status == "cancelled":
-        raise HTTPException(409, "Purchase order is cancelled")
+    if order.status in {"pending_approval", "rejected", "cancelled"}:
+        raise HTTPException(409, "Purchase order is not eligible for delivery")
     movement = record_stock(
         db,
         StockMovementInput(
@@ -165,6 +166,15 @@ def create_supplier_payment(payload: PaymentInput, db: Session = Depends(get_db)
             raise HTTPException(404, "Purchase order not found")
         if order.supplier_id != payload.supplier_id:
             raise HTTPException(422, "Purchase order belongs to a different supplier")
+        if order.status in {"pending_approval", "rejected", "cancelled"}:
+            raise HTTPException(409, "Purchase order is not eligible for payment")
+    if required_by_limit(db, "vendor_payment", payload.amount):
+        request = queue_request(db, kind="vendor_payment", user_id=user.id,
+                                description=f"Payment to supplier #{payload.supplier_id}",
+                                amount=payload.amount, payload=payload.model_dump(mode="json"))
+        approval_id = request.id
+        db.commit()
+        return {"status": "pending_approval", "approval_id": approval_id}
     payment = SupplierPayment(**payload.model_dump(), created_by=user.id)
     db.add(payment)
     db.commit()

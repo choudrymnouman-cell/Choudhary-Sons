@@ -162,3 +162,76 @@ def test_applicant_and_hr_workflow(session):
     employee = create(client, f"{base}/hire", hr, hire)
     assert create(client, f"{base}/hire", hr, hire) == employee
     assert client.get(f"{API}/auth/me", headers=applicant).json()["role"] == "employee"
+
+
+def test_owner_accounts_invalidate_old_sessions_and_record_activity(session):
+    client, owner, tag = session
+    owner_api = f"{API}/owner"
+    account = create(client, f"{owner_api}/accounts", owner, {
+        "full_name": "Accounts manager", "email": f"accounts-{tag}@example.com",
+        "role": "accountant", "password": PASSWORD,
+    })
+    assert "password_hash" not in account
+    staff = login(client, account["email"])
+    assert client.get(f"{owner_api}/overview", headers=staff).status_code == 403
+    assert client.get(f"{owner_api}/accounts", headers=staff).status_code == 403
+    assert client.get(f"{owner_api}/activity", headers=staff).status_code == 403
+
+    reset = client.patch(f"{owner_api}/accounts/{account['id']}", headers=owner,
+                         json={"password": f"new-{PASSWORD}"})
+    assert reset.status_code == 200, reset.text
+    assert client.get(f"{API}/auth/me", headers=staff).status_code == 401
+    login_result = client.post(f"{API}/auth/login", data={"username": account["email"], "password": f"new-{PASSWORD}"})
+    assert login_result.status_code == 200
+    new_staff = {"Authorization": "Bearer " + login_result.json()["access_token"]}
+    assert client.patch(f"{owner_api}/accounts/{account['id']}", headers=owner, json={"is_active": False}).status_code == 200
+    assert client.get(f"{API}/auth/me", headers=new_staff).status_code == 401
+
+    events = client.get(f"{owner_api}/activity", headers=owner).json()
+    assert any(event["resource_id"] == account["id"] and event["method"] == "PATCH" for event in events)
+    assert PASSWORD not in str(events)
+    assert client.get(f"{owner_api}/overview", headers=owner).status_code == 200
+
+
+def test_owner_approvals_gate_delivery_payment_and_project_signoff(session):
+    client, owner, tag = session
+    owner_api = f"{API}/owner"
+    limits = {"purchase_order_threshold": "250.00", "vendor_payment_threshold": "100.00"}
+    response = client.put(f"{owner_api}/approval-settings", headers=owner, json=limits)
+    assert response.status_code == 200, response.text
+
+    project = create(client, f"{API}/projects", owner, {"code": f"PA-{tag}", "name": "Project"}, 200)
+    material = create(client, f"{TRADE}/materials", owner, {"sku": f"WA-{tag}", "name": "Material"}, 200)
+    supplier = create(client, f"{TRADE}/suppliers", owner, {"name": "Supplier"}, 200)
+    order = create(client, f"{TRADE}/purchase-orders", owner, {
+        "po_number": f"OA-{tag}", "supplier_id": supplier["id"], "project_id": project["id"],
+        "order_date": "2026-11-01", "subtotal": 240, "tax_amount": 10, "total_amount": 1,
+    }, 200)
+    assert order["status"] == "pending_approval"
+    delivery = {"purchase_order_id": order["id"], "material_id": material["id"], "quantity": 5}
+    create(client, f"{TRADE}/deliveries", owner, delivery, 409)
+    approvals = client.get(f"{owner_api}/approvals", headers=owner).json()
+    po_id = next(row["id"] for row in approvals if row["record_id"] == order["id"] and row["kind"] == "purchase_order")
+    create(client, f"{owner_api}/approvals/{po_id}/approve", owner, {}, 200)
+    create(client, f"{TRADE}/deliveries", owner, delivery)
+
+    payment_data = {"supplier_id": supplier["id"], "purchase_order_id": order["id"], "amount": "100.00"}
+    queued = create(client, f"{TRADE}/supplier-payments", owner, payment_data)
+    assert queued["status"] == "pending_approval"
+    assert not any(row["purchase_order_id"] == order["id"] for row in client.get(f"{TRADE}/supplier-payments", headers=owner).json())
+    payment_approval = f"{owner_api}/approvals/{queued['approval_id']}/approve"
+    create(client, payment_approval, owner, {}, 200)
+    create(client, payment_approval, owner, {}, 200)
+    assert len([row for row in client.get(f"{TRADE}/supplier-payments", headers=owner).json()
+                if row["purchase_order_id"] == order["id"]]) == 1
+
+    for _ in range(2):
+        result = client.patch(f"{API}/projects/{project['id']}", headers=owner, json={"status": "completed"})
+        assert result.status_code == 200 and result.json()["status"] != "completed"
+    signoffs = [row for row in client.get(f"{owner_api}/approvals", headers=owner).json()
+                if row["kind"] == "project_signoff" and row["record_id"] == project["id"]]
+    assert len(signoffs) == 1
+    create(client, f"{owner_api}/approvals/{signoffs[0]['id']}/approve", owner, {}, 200)
+    projects = client.get(f"{API}/projects", headers=owner).json()
+    assert next(row for row in projects if row["id"] == project["id"])["status"] == "completed"
+    client.put(f"{owner_api}/approval-settings", headers=owner, json={})

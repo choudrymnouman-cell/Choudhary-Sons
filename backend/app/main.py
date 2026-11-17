@@ -1,10 +1,12 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
-from app.api import attendance, auth, commercial, documents, employees, field_ops, operations, recruitment, trade
+from app.api import approvals, attendance, auth, commercial, documents, employees, field_ops, operations, owner, recruitment, trade
+from app.api.activity import record_activity
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.models import commercial as commercial_models  # noqa: F401
@@ -31,6 +33,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def audit_activity(request: Request, call_next):
+    response = await call_next(request)
+    await run_in_threadpool(record_activity, request, response.status_code)
+    return response
+
+
+app.include_router(approvals.router, prefix="/api/v1")
+app.include_router(owner.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(employees.router, prefix="/api/v1")
 app.include_router(attendance.router, prefix="/api/v1")

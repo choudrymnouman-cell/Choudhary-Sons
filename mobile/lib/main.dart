@@ -8,6 +8,7 @@ import 'screens/employee_portal_screens.dart';
 import 'screens/field_operations_screen.dart';
 import 'screens/management_lists.dart';
 import 'screens/recruitment_pipeline_screen.dart';
+import 'screens/owner_console.dart';
 import 'services/api_service.dart';
 import 'services/applicant_portal_service.dart';
 
@@ -445,6 +446,15 @@ class ManagementHome extends StatelessWidget {
               ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
+        if (selfHostedWeb && session.role == 'owner')
+          _HomeTile(
+            Icons.admin_panel_settings_outlined,
+            'Owner Console',
+            'Company finances, account access and activity',
+            () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => OwnerConsole(session: session),
+            )),
+          ),
         _HomeTile(
           Icons.business_center_outlined,
           'Commercial Control',

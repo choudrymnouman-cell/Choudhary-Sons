@@ -1,10 +1,13 @@
+import math
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.approvals import queue_request, required_by_limit
 from app.api.auth import get_current_user
 from app.db.session import get_db
 from app.models.commercial import BoqItem, ClientInvoice, Expense, Material, PurchaseOrder, Supplier
@@ -136,11 +139,23 @@ def list_purchase_orders(db: Session = Depends(get_db), _: User = Depends(requir
 
 
 @router.post("/purchase-orders")
-def create_purchase_order(payload: PurchaseOrderCreate, db: Session = Depends(get_db), _: User = Depends(require_management)):
+def create_purchase_order(payload: PurchaseOrderCreate, db: Session = Depends(get_db), actor: User = Depends(require_management)):
     if db.query(PurchaseOrder).filter(PurchaseOrder.po_number == payload.po_number).first():
         raise HTTPException(status_code=400, detail="PO number already exists")
-    po = PurchaseOrder(**payload.model_dump())
+    amounts = (payload.subtotal, payload.tax_amount, payload.total_amount)
+    if any(not math.isfinite(value) or value < 0 for value in amounts):
+        raise HTTPException(422, "PO amounts must be finite and non-negative")
+    total = max(Decimal(str(payload.total_amount)), Decimal(str(payload.subtotal)) + Decimal(str(payload.tax_amount)))
+    if total >= Decimal("100000000000000"):
+        raise HTTPException(422, "PO amount is too large")
+    pending = required_by_limit(db, "purchase_order", total)
+    po = PurchaseOrder(**payload.model_dump(exclude={"total_amount"}), total_amount=total,
+                       status="pending_approval" if pending else "draft")
     db.add(po)
+    db.flush()
+    if pending:
+        queue_request(db, kind="purchase_order", user_id=actor.id,
+                      description=f"Purchase order {po.po_number}", record_id=po.id, amount=total)
     db.commit()
     db.refresh(po)
     return po

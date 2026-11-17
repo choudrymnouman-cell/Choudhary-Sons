@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 part 'fastapi_service.dart';
 part 'recruitment_http.dart';
+part 'owner_http.dart';
 
 const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 
@@ -71,8 +72,9 @@ class ApiService {
   Future<void> recordDelivery(String token, Map<String, dynamic> data) =>
       throw UnsupportedError('Delivery recording requires the self-hosted backend.');
 
-  Future<void> recordSupplierPayment(String token, Map<String, dynamic> data) async {
+  Future<bool> recordSupplierPayment(String token, Map<String, dynamic> data) async {
     await _db.from('supplier_payments').insert(data);
+    return false;
   }
 
   Future<void> createClient(String token, String name) async {

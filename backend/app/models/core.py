@@ -35,6 +35,7 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.EMPLOYEE)
+    token_version: Mapped[int] = mapped_column(server_default="0", default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
