@@ -34,6 +34,8 @@ def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: 
     user = db.get(User, user_id)
     if not user or not user.is_active or payload.get("ver", 0) != user.token_version:
         raise credentials_exception
+    if user.role == UserRole.PENDING and request.url.path != "/api/v1/auth/me":
+        raise HTTPException(403, "Waiting for owner to assign a department")
     request.state.audit_actor_id = user.id
     return user
 

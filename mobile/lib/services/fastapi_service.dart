@@ -3,6 +3,10 @@ part of 'api_service.dart';
 class FastApiService extends ApiService {
   FastApiService() : super._();
 
+  Future<void> registerStaff(String name, String email, String password) async {
+    _body(await http.post(_uri('/api/v1/auth/signup'), headers: {'Content-Type':'application/json'}, body: jsonEncode({'full_name':name,'email':email,'password':password})));
+  }
+
   static String? _sessionToken;
   static const baseUrl = String.fromEnvironment('API_BASE_URL');
 

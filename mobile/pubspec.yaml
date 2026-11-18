@@ -13,5 +13,9 @@ dependencies:
   file_picker: ^8.1.7
   supabase_flutter: ^2.15.4
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
 flutter:
   uses-material-design: true

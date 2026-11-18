@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/applicant_dashboard.dart';
+import 'screens/department_home.dart';
 import 'screens/commercial_dashboard.dart';
 import 'screens/documents_screen.dart';
 import 'screens/employee_portal_screens.dart';
@@ -183,6 +184,7 @@ class _LoginState extends State<LoginScreen> {
   final api = ApiService();
   final email = TextEditingController(), password = TextEditingController();
   bool busy = false;
+  bool hidePassword = true;
   String role = 'Applicant';
   String? error;
   @override
@@ -229,6 +231,8 @@ class _LoginState extends State<LoginScreen> {
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const Text('Civil Services • Contractor • Supplier'),
+                  const SizedBox(height: 8),
+                  if (selfHostedWeb) const Text('Sign in to your company workspace', style: TextStyle(color: Color(0xFF627570))),
                   const SizedBox(height: 22),
                   if (!selfHostedWeb) SegmentedButton<String>(
                     segments: const [
@@ -255,8 +259,9 @@ class _LoginState extends State<LoginScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: password,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: hidePassword,
+                    onSubmitted: (_) { if (!busy) login(); },
+                    decoration: InputDecoration(labelText: 'Password', suffixIcon: IconButton(tooltip: hidePassword ? 'Show password' : 'Hide password', onPressed: () => setState(() => hidePassword = !hidePassword), icon: Icon(hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined))),
                   ),
                   if (error != null) ...[
                     const SizedBox(height: 10),
@@ -291,7 +296,7 @@ class _LoginState extends State<LoginScreen> {
                           ),
                         );
                       },
-                      child: const Text('Create Applicant Account'),
+                      child: Text(selfHostedWeb ? 'Create an account' : 'Create Applicant Account'),
                     ),
                   ],
                 ],
@@ -331,15 +336,15 @@ class _ApplicantSignupState extends State<ApplicantSignupScreen> {
       message = null;
     });
     try {
-      await service.signUp(
-        email: email.text.trim(),
-        password: password.text,
-        fullName: name.text.trim(),
-      );
+      if (selfHostedWeb) {
+        await FastApiService().registerStaff(name.text.trim(), email.text.trim(), password.text);
+      } else {
+        await service.signUp(email: email.text.trim(), password: password.text, fullName: name.text.trim());
+      }
       if (!mounted) return;
       setState(
         () => message = selfHostedWeb
-            ? 'Account created. Return to sign in.'
+            ? 'Account created. Sign in to check your status. The owner will assign your department.'
             : 'Account created. Check your email and confirm your address, then return and sign in as Applicant.',
       );
     } catch (e) {
@@ -351,7 +356,7 @@ class _ApplicantSignupState extends State<ApplicantSignupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Applicant Signup')),
+    appBar: AppBar(title: Text(selfHostedWeb ? 'Create your account' : 'Applicant Signup')),
     body: Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -363,7 +368,7 @@ class _ApplicantSignupState extends State<ApplicantSignupScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Join our talent network',
+                    selfHostedWeb ? 'Join Choudhary & Sons' : 'Join our talent network',
                     style: Theme.of(context).textTheme.headlineSmall
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
@@ -381,7 +386,7 @@ class _ApplicantSignupState extends State<ApplicantSignupScreen> {
                   TextField(
                     controller: password,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: const InputDecoration(labelText: 'Password', helperText: 'Use at least 12 characters'),
                   ),
                   if (message != null) ...[
                     const SizedBox(height: 12),
@@ -412,6 +417,20 @@ class RoleHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final role = session.role.toLowerCase();
+    if (selfHostedWeb && role == 'pending') {
+      return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.hourglass_top, size: 64, color: brandGreen),
+        const SizedBox(height: 24),
+        Text('Welcome, ${session.fullName}', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        const Text('Your account is ready. The owner will assign your department.\nOnce assigned, sign in again to open your workspace.', textAlign: TextAlign.center),
+        const SizedBox(height: 24),
+        FilledButton(onPressed: onLogout, child: const Text('Return to sign in')),
+      ]))));
+    }
+    if (selfHostedWeb && !{'employee', 'applicant'}.contains(role)) {
+      return DepartmentHome(session: session, onLogout: onLogout);
+    }
     if (role == 'applicant') {
       return ApplicantDashboard(session: session, onLogout: onLogout);
     }

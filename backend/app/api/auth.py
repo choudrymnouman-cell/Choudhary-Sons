@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
-from app.core.security import create_access_token, verify_password
-from app.models.core import User
+from app.core.security import create_access_token, verify_password, hash_password
+from app.models.core import User, UserRole
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -44,3 +46,29 @@ def me(current_user: User = Depends(get_current_user)):
         "role": current_user.role.value,
         "is_active": current_user.is_active,
     }
+
+
+class Registration(BaseModel):
+    full_name: str = Field(min_length=1, max_length=150)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=72)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/signup", status_code=201)
+def register(payload: Registration, db: Session = Depends(get_db)):
+    name = payload.full_name.strip()
+    if not name or len(payload.password.encode()) > 72:
+        raise HTTPException(422, "Name required; password must fit within 72 UTF-8 bytes")
+    email = payload.email.lower()
+    if db.scalar(select(User.id).where(func.lower(User.email) == email)):
+        raise HTTPException(409, "An account already exists")
+    account = User(full_name=name, email=email, password_hash=hash_password(payload.password), role=UserRole.PENDING)
+    db.add(account)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "An account already exists")
+    return {"created": True, "status": "pending", "message": "Ask the owner to assign your department."}

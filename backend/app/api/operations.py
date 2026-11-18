@@ -8,9 +8,10 @@ from sqlalchemy import select
 
 from app.api.approvals import queue_request
 from app.api.deps import get_current_user, require_roles
+from app.api.project_access import project_query, require_project
 from app.api.recruitment import notify_matching_jobs
 from app.db.session import get_db
-from app.models.core import Employee, Project, ProjectStatus, User, UserRole
+from app.models.core import Employee, Project, ProjectStatus, User, UserRole, UserProjectAssignment
 from app.models.ownership import ApprovalRequest
 from app.models.operations import ApplicationStatus, JobApplication, JobVacancy, LeaveRequest, LeaveStatus, PayrollRecord
 
@@ -37,17 +38,23 @@ class ProjectUpdate(BaseModel):
 
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role == UserRole.APPLICANT:
-        raise HTTPException(403, "Staff access required")
-    return db.query(Project).order_by(Project.id.desc()).all()
+    if user.role not in {UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR, UserRole.PROCUREMENT, UserRole.STORE, UserRole.ESTIMATOR, UserRole.EQUIPMENT, UserRole.HR}:
+        raise HTTPException(403, "Project access required")
+    rows = project_query(db.query(Project), Project.id, db, user).order_by(Project.id.desc()).all()
+    if user.role in {UserRole.PROCUREMENT, UserRole.STORE, UserRole.EQUIPMENT, UserRole.SITE_SUPERVISOR, UserRole.HR}:
+        return [{"id": p.id, "name": p.name, "code": p.code, "status": p.status, "site_address": p.site_address} for p in rows]
+    return rows
 
 
 @router.post("/projects")
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+def create_project(payload: ProjectCreate, db: Session = Depends(get_db), actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
     if db.query(Project).filter(Project.code == payload.code).first():
         raise HTTPException(status_code=409, detail="Project code already exists")
     project = Project(**payload.model_dump())
     db.add(project)
+    db.flush()
+    if actor.role == UserRole.PROJECT_MANAGER:
+        db.add(UserProjectAssignment(user_id=actor.id, project_id=project.id))
     db.commit()
     db.refresh(project)
     return project
@@ -55,6 +62,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
 
 @router.patch("/projects/{project_id}")
 def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db), actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+    require_project(db, actor, project_id)
     project = db.get(Project, project_id, with_for_update=True)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

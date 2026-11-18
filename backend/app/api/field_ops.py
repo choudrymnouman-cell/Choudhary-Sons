@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.api.project_access import project_query, require_project
 from app.core.config import settings
 from app.models.commercial import ClientInvoice, Expense, PurchaseOrder
 from app.models.core import Attendance, Employee, Project, ProjectStatus, User, UserRole
@@ -103,12 +104,12 @@ class NoticeCreate(BaseModel):
 
 
 @router.get("/assets")
-def list_assets(db: Session = Depends(get_db), _: User = Depends(require_roles(*MANAGEMENT))):
+def list_assets(db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     return db.query(Asset).order_by(Asset.name).all()
 
 
 @router.post("/assets")
-def create_asset(payload: AssetCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+def create_asset(payload: AssetCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     if db.query(Asset).filter(Asset.asset_code == payload.asset_code).first():
         raise HTTPException(status_code=409, detail="Asset code already exists")
     asset = Asset(**payload.model_dump())
@@ -119,7 +120,7 @@ def create_asset(payload: AssetCreate, db: Session = Depends(get_db), _: User = 
 
 
 @router.post("/assets/fuel")
-def add_fuel(payload: FuelCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+def add_fuel(payload: FuelCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     asset = db.get(Asset, payload.asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -133,7 +134,7 @@ def add_fuel(payload: FuelCreate, db: Session = Depends(get_db), _: User = Depen
 
 
 @router.post("/assets/maintenance")
-def add_maintenance(payload: MaintenanceCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+def add_maintenance(payload: MaintenanceCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     if not db.get(Asset, payload.asset_id):
         raise HTTPException(status_code=404, detail="Asset not found")
     log = MaintenanceLog(**payload.model_dump())
@@ -144,7 +145,7 @@ def add_maintenance(payload: MaintenanceCreate, db: Session = Depends(get_db), _
 
 
 @router.get("/assets/cost-summary")
-def asset_cost_summary(db: Session = Depends(get_db), _: User = Depends(require_roles(*MANAGEMENT))):
+def asset_cost_summary(db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     fuel_cost = db.query(func.coalesce(func.sum(FuelLog.total_cost), 0)).scalar()
     maintenance_cost = db.query(func.coalesce(func.sum(MaintenanceLog.cost), 0)).scalar()
     return {
@@ -159,6 +160,7 @@ def asset_cost_summary(db: Session = Depends(get_db), _: User = Depends(require_
 def create_site_report(payload: DailyReportCreate, db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
     if not db.get(Project, payload.project_id):
         raise HTTPException(status_code=404, detail="Project not found")
+    require_project(db, user, payload.project_id)
     report = SiteDailyReport(**payload.model_dump(), submitted_by=user.id)
     db.add(report)
     db.commit()
@@ -167,8 +169,8 @@ def create_site_report(payload: DailyReportCreate, db: Session = Depends(get_db)
 
 
 @router.get("/site-reports")
-def list_site_reports(project_id: int | None = None, db: Session = Depends(get_db), _: User = Depends(require_roles(*MANAGEMENT))):
-    query = db.query(SiteDailyReport)
+def list_site_reports(project_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+    query = project_query(db.query(SiteDailyReport), SiteDailyReport.project_id, db, user)
     if project_id is not None:
         query = query.filter(SiteDailyReport.project_id == project_id)
     return query.order_by(SiteDailyReport.report_date.desc()).all()
@@ -176,6 +178,7 @@ def list_site_reports(project_id: int | None = None, db: Session = Depends(get_d
 
 @router.post("/safety/incidents")
 def create_incident(payload: IncidentCreate, db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+    require_project(db, user, payload.project_id)
     incident = SafetyIncident(**payload.model_dump(), reported_by=user.id)
     db.add(incident)
     db.commit()
@@ -184,12 +187,13 @@ def create_incident(payload: IncidentCreate, db: Session = Depends(get_db), user
 
 
 @router.get("/safety/incidents")
-def list_incidents(db: Session = Depends(get_db), _: User = Depends(require_roles(*MANAGEMENT))):
-    return db.query(SafetyIncident).order_by(SafetyIncident.incident_date.desc()).all()
+def list_incidents(db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+    return project_query(db.query(SafetyIncident), SafetyIncident.project_id, db, user).order_by(SafetyIncident.incident_date.desc()).all()
 
 
 @router.post("/safety/inspections")
-def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+    require_project(db, user, payload.project_id)
     inspection = SafetyInspection(**payload.model_dump())
     db.add(inspection)
     db.commit()
@@ -215,6 +219,7 @@ async def upload_document(
     if project_id is None and employee_id is None:
         raise HTTPException(status_code=400, detail="Attach the document to a project or employee")
 
+    require_project(db, user, project_id)
     original_name = Path(file.filename or "upload").name
     extension = Path(original_name).suffix.lower()
     if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
@@ -256,9 +261,11 @@ def list_documents(
     project_id: int | None = None,
     employee_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+    user: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
 ):
-    query = db.query(CompanyDocument)
+    query = project_query(db.query(CompanyDocument), CompanyDocument.project_id, db, user)
+    if user.role != UserRole.OWNER:
+        query = query.filter(CompanyDocument.uploaded_by == user.id)
     if project_id is not None:
         query = query.filter(CompanyDocument.project_id == project_id)
     if employee_id is not None:
@@ -284,7 +291,7 @@ def list_notices(db: Session = Depends(get_db), user: User = Depends(get_current
 
 
 @router.get("/dashboard/kpis")
-def dashboard_kpis(db: Session = Depends(get_db), _: User = Depends(require_roles(*MANAGEMENT))):
+def dashboard_kpis(db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER))):
     today = date.today()
     active_projects = db.query(Project).filter(Project.status == ProjectStatus.ACTIVE).count()
     employee_count = db.query(Employee).count()

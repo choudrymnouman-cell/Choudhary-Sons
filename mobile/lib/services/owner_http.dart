@@ -6,6 +6,9 @@ class OwnerHttp {
   final String token;
   final _api = FastApiService();
 
+  Future<List<Map<String, dynamic>>> projects() async =>
+      (await _api.projects(token)).cast<Map<String, dynamic>>();
+
   Future<Map<String, dynamic>> overview() =>
       _api._getMap('/api/v1/owner/overview', token);
 

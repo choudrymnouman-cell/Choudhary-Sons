@@ -20,6 +20,8 @@ jobs:
       - run: flutter pub get
       - name: Analyze Flutter
         run: flutter analyze --no-fatal-infos
+      - name: Test department navigation
+        run: flutter test --dart-define=SELF_HOSTED_WEB=true test/department_home_test.dart
       - name: Build Flutter Web
         run: flutter build web --release --base-href "/Choudhary-Sons/"
       - name: Build self-hosted Flutter Web

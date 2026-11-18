@@ -43,7 +43,7 @@ class EmployeeUpdate(BaseModel):
 @router.get("")
 def list_employees(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.ACCOUNTANT, UserRole.PROJECT_MANAGER)),
+    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.ACCOUNTANT)),
 ):
     employees = db.scalars(select(Employee).order_by(Employee.id.desc())).all()
     return [
