@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app.api import approvals, attendance, auth, commercial, documents, employees, field_ops, operations, owner, recruitment, tenders, trade
+from app.api import planning, requisitions
 from app.api.activity import record_activity
 from app.core.config import settings
 from app.db.session import Base, engine
@@ -40,6 +41,8 @@ async def audit_activity(request: Request, call_next):
     return response
 
 
+app.include_router(requisitions.router, prefix="/api/v1")
+app.include_router(planning.router, prefix="/api/v1")
 app.include_router(approvals.router, prefix="/api/v1")
 app.include_router(owner.router, prefix="/api/v1")
 app.include_router(tenders.router, prefix="/api/v1")

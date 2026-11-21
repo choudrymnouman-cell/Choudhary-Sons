@@ -30,3 +30,15 @@ The local SQLite test suite passes 26 tests, including signup, assignment, token
 This release reorganizes existing working modules; it does not complete the whole ERP roadmap. Richer multi-site inventory, Gantt/milestones, full accounting and tax rules, hardware GPS, attendance geofencing, client portal and external notifications remain separate work. No new automated backup system is added here. Role labels alone must not be represented as completion of those workflows.
 
 Migration 0008 adds project assignments and optional employee work sites. Migration 0007 adds PostgreSQL enum values without changing existing accounts or data. No production database reset is required. New source is not deployed until build and migration checks complete.
+
+
+## Workflow completion work (not deployed)
+
+- Approved staff accounts can be linked to HR profiles without changing credentials or permissions. HR-created accounts wait for owner assignment. Only the owner can revoke account access.
+- Payroll selects employees by name and pre-fills salary; the backend validates periods, non-negative money and net pay. Finance/owner records payments with references; repeated payments are rejected. Leave requests reject overlaps and cannot be reviewed twice or by their requester.
+- Project tasks and milestones have dates, progress, status and overdue indicators. Project/site access stays scoped to owner assignments. Closed projects reject progress changes.
+- Material requests can be submitted by site/project staff and converted once by procurement into a priced PO with an item line. Existing owner thresholds gate approval. Cancellation is limited to unprocessed requests and the requester/owner.
+- Safety inspections can be recorded/listed; owners and assigned project managers can close incidents with corrective actions.
+- Equipment includes fuel/service history and current service-due alerts; negative fuel quantities and backwards meter readings are rejected.
+
+Migrations 0009 and 0010 add task and requisition tables without resetting data. These additions do not yet implement full double-entry accounting, multi-site stock balances, client portal, GPS hardware feeds, automated communications or statutory tax configuration.

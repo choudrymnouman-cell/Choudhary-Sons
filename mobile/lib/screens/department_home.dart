@@ -11,6 +11,9 @@ import 'supplier_purchase_screen.dart';
 import 'client_receivables_screen.dart';
 import 'project_financial_screen.dart';
 import 'boq_management_screen.dart';
+import 'project_schedule.dart';
+import 'safety_workspace.dart';
+import 'requisition_workspace.dart';
 
 const departmentNames = <String, String>{
   'owner': 'Owner command center', 'hr': 'Human resources',
@@ -70,6 +73,7 @@ class _DepartmentHomeState extends State<DepartmentHome> {
         form('Add client','Register a new billing client.',Icons.person_add_outlined,'Client'),
       ];
       case 'procurement': return [
+        if (selfHostedWeb) _Task('Material requests','Follow site requests through procurement and owner approval.',Icons.playlist_add_check,()=>open(RequisitionWorkspace(session:s))),
         _Task('Purchases & deliveries','Review suppliers, purchase orders and deliveries.',Icons.local_shipping_outlined,()=>open(SupplierPurchaseScreen(session:s,showFinance:false))),
         form('New purchase order','Request a purchase; high values go to the owner.',Icons.shopping_cart_checkout_outlined,'Purchase Order'),
         form('Add supplier','Maintain your supplier directory.',Icons.storefront_outlined,'Supplier'),
@@ -77,6 +81,7 @@ class _DepartmentHomeState extends State<DepartmentHome> {
         form('Add material','Create a material and reorder level.',Icons.add_box_outlined,'Material'),
       ];
       case 'store': return [
+        if (selfHostedWeb) _Task('Material requests','Follow site requests through procurement and owner approval.',Icons.playlist_add_check,()=>open(RequisitionWorkspace(session:s))),
         _Task('Material stock','Receive, issue and track inventory movements.',Icons.inventory_2_outlined,()=>open(MaterialStockScreen(session:s))),
         form('Receive delivery','Receive material into inventory.',Icons.move_to_inbox_outlined,'Delivery'),
         form('Add material','Create a new stock item.',Icons.add_box_outlined,'Material'),
@@ -87,6 +92,9 @@ class _DepartmentHomeState extends State<DepartmentHome> {
         records('Material rates','Review the material catalogue and average costs.',Icons.price_change_outlined,()=>api.materials(t)),
       ];
       case 'project_manager': return [
+        if (selfHostedWeb) _Task('Material requests','Follow site requests through procurement and owner approval.',Icons.playlist_add_check,()=>open(RequisitionWorkspace(session:s))),
+        if (selfHostedWeb) _Task('Tasks & milestones','Plan site targets and update work progress.',Icons.view_timeline_outlined,()=>open(ProjectSchedule(session:s))),
+        if (selfHostedWeb) _Task('Quality & safety','Inspect sites and resolve reported incidents.',Icons.health_and_safety_outlined,()=>open(SafetyWorkspace(session:s))),
         list('Projects','Create projects and maintain their lifecycle.',Icons.apartment_outlined),
         _Task('Bill of quantities','Track quantities and executed work.',Icons.calculate_outlined,()=>open(BoqManagementScreen(session:s))),
         records('Daily reports','Review work done, weather and delays.',Icons.description_outlined,()=>api.siteReports(t)),
@@ -94,12 +102,19 @@ class _DepartmentHomeState extends State<DepartmentHome> {
         records('Safety incidents','Review site safety records.',Icons.health_and_safety_outlined,()=>api.safetyIncidents(t)),
       ];
       case 'site_supervisor': return [
+        if (selfHostedWeb) _Task('Material requests','Follow site requests through procurement and owner approval.',Icons.playlist_add_check,()=>open(RequisitionWorkspace(session:s))),
+        if (selfHostedWeb) _Task('Tasks & milestones','Update progress against your assigned site targets.',Icons.view_timeline_outlined,()=>open(ProjectSchedule(session:s))),
+        if (selfHostedWeb) _Task('Quality & safety','Report incidents and record site inspections.',Icons.health_and_safety_outlined,()=>open(SafetyWorkspace(session:s))),
         list('Attendance','Review site attendance.',Icons.fact_check_outlined),
         form('Daily site report','Record work, weather and delays.',Icons.note_add_outlined,'Site Report'),
         records('Site reports','Review submitted progress reports.',Icons.description_outlined,()=>api.siteReports(t)),
         form('Report an incident','Record a safety incident.',Icons.health_and_safety_outlined,'Safety Incident'),
       ];
       case 'equipment': return [
+        if (selfHostedWeb) records('Service alerts','Equipment due for service by date or meter reading.',Icons.notification_important_outlined,()=>WorkspaceHttp(t).list('/assets/maintenance-due')),
+        if (selfHostedWeb) records('Fuel history','Review fuel quantities, meter readings and costs.',Icons.local_gas_station_outlined,()=>WorkspaceHttp(t).list('/assets/fuel')),
+        if (selfHostedWeb) records('Service history','Review completed maintenance and next service dates.',Icons.build_circle_outlined,()=>WorkspaceHttp(t).list('/assets/maintenance')),
+
         records('Equipment register','View machinery, vehicles and their status.',Icons.precision_manufacturing_outlined,()=>api.assets(t)),
         form('Add equipment','Register a machine or vehicle.',Icons.add_circle_outline,'Asset'),
         form('Fuel log','Record fuel quantity and cost.',Icons.local_gas_station_outlined,'Fuel Log'),

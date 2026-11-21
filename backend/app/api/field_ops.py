@@ -3,7 +3,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from decimal import Decimal
+from typing import Literal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -46,16 +48,16 @@ class AssetCreate(BaseModel):
     registration_number: str | None = None
     make_model: str | None = None
     project_id: int | None = None
-    current_meter: float = 0
+    current_meter: Decimal = Field(default=Decimal("0"), ge=0)
     notes: str | None = None
 
 
 class FuelCreate(BaseModel):
     asset_id: int
     project_id: int | None = None
-    liters: float
-    rate_per_liter: float
-    meter_reading: float | None = None
+    liters: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    rate_per_liter: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    meter_reading: Decimal | None = Field(default=None, ge=0)
     vendor: str | None = None
 
 
@@ -63,16 +65,16 @@ class MaintenanceCreate(BaseModel):
     asset_id: int
     maintenance_type: str
     description: str
-    cost: float = 0
+    cost: Decimal = Field(default=Decimal("0"), ge=0, max_digits=14, decimal_places=2)
     vendor: str | None = None
     next_due_date: date | None = None
-    next_due_meter: float | None = None
+    next_due_meter: Decimal | None = Field(default=None, ge=0)
 
 
 class DailyReportCreate(BaseModel):
     project_id: int
     weather: str | None = None
-    workforce_count: int = 0
+    workforce_count: int = Field(default=0, ge=0)
     work_completed: str
     materials_used: str | None = None
     equipment_used: str | None = None
@@ -82,7 +84,7 @@ class DailyReportCreate(BaseModel):
 
 class IncidentCreate(BaseModel):
     project_id: int | None = None
-    severity: str = "minor"
+    severity: Literal["minor", "moderate", "major", "critical"] = "minor"
     title: str
     description: str
     injured_person: str | None = None
@@ -92,7 +94,7 @@ class IncidentCreate(BaseModel):
 class InspectionCreate(BaseModel):
     project_id: int
     inspector: str
-    score: float | None = None
+    score: float | None = Field(default=None, ge=0, le=100)
     findings: str | None = None
     action_required: str | None = None
 
@@ -112,6 +114,7 @@ def list_assets(db: Session = Depends(get_db), _: User = Depends(require_roles(U
 def create_asset(payload: AssetCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
     if db.query(Asset).filter(Asset.asset_code == payload.asset_code).first():
         raise HTTPException(status_code=409, detail="Asset code already exists")
+    require_project(db, _, payload.project_id)
     asset = Asset(**payload.model_dump())
     db.add(asset)
     db.commit()
@@ -121,9 +124,12 @@ def create_asset(payload: AssetCreate, db: Session = Depends(get_db), _: User = 
 
 @router.post("/assets/fuel")
 def add_fuel(payload: FuelCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
-    asset = db.get(Asset, payload.asset_id)
+    asset = db.get(Asset, payload.asset_id, with_for_update=True)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+    require_project(db, _, payload.project_id)
+    if payload.meter_reading is not None and payload.meter_reading < asset.current_meter:
+        raise HTTPException(409, "Meter reading cannot go backwards")
     log = FuelLog(**payload.model_dump(), total_cost=payload.liters * payload.rate_per_liter)
     if payload.meter_reading is not None:
         asset.current_meter = payload.meter_reading
@@ -142,6 +148,36 @@ def add_maintenance(payload: MaintenanceCreate, db: Session = Depends(get_db), _
     db.commit()
     db.refresh(log)
     return log
+
+
+@router.get("/assets/fuel")
+def fuel_history(asset_id: int | None = None, db: Session = Depends(get_db),
+                 _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
+    query = db.query(FuelLog)
+    if asset_id is not None:
+        query = query.filter(FuelLog.asset_id == asset_id)
+    return query.order_by(FuelLog.log_date.desc(), FuelLog.id.desc()).all()
+
+
+@router.get("/assets/maintenance")
+def maintenance_history(asset_id: int | None = None, db: Session = Depends(get_db),
+                        _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
+    query = db.query(MaintenanceLog)
+    if asset_id is not None:
+        query = query.filter(MaintenanceLog.asset_id == asset_id)
+    return query.order_by(MaintenanceLog.maintenance_date.desc(), MaintenanceLog.id.desc()).all()
+
+
+@router.get("/assets/maintenance-due")
+def maintenance_due(db: Session = Depends(get_db),
+                    _: User = Depends(require_roles(UserRole.OWNER, UserRole.EQUIPMENT))):
+    # Only the latest service of each type determines the next due date.
+    latest = db.query(func.max(MaintenanceLog.id)).group_by(MaintenanceLog.asset_id, MaintenanceLog.maintenance_type)
+    rows = db.query(MaintenanceLog, Asset).join(Asset, Asset.id == MaintenanceLog.asset_id).filter(MaintenanceLog.id.in_(latest)).all()
+    return [{"asset_id": a.id, "name": a.name, "maintenance_type": m.maintenance_type,
+             "next_due_date": m.next_due_date, "next_due_meter": m.next_due_meter, "current_meter": a.current_meter}
+            for m, a in rows if (m.next_due_date and m.next_due_date <= date.today())
+            or (m.next_due_meter is not None and a.current_meter >= m.next_due_meter)]
 
 
 @router.get("/assets/cost-summary")
@@ -199,6 +235,31 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
     db.commit()
     db.refresh(inspection)
     return inspection
+
+
+@router.get("/safety/inspections")
+def inspections(db: Session = Depends(get_db), user: User = Depends(require_roles(*FIELD_MANAGEMENT))):
+    return project_query(db.query(SafetyInspection), SafetyInspection.project_id, db, user).order_by(SafetyInspection.id.desc()).all()
+
+
+class IncidentResolution(BaseModel):
+    corrective_action: str = Field(min_length=5, max_length=10000)
+
+
+@router.post("/safety/incidents/{incident_id}/close")
+def close_incident(incident_id: int, payload: IncidentResolution, db: Session = Depends(get_db),
+                   user: User = Depends(require_roles(UserRole.OWNER, UserRole.PROJECT_MANAGER))):
+    incident = db.get(SafetyIncident, incident_id, with_for_update=True)
+    if not incident:
+        raise HTTPException(404, "Incident not found")
+    require_project(db, user, incident.project_id)
+    if incident.is_closed:
+        raise HTTPException(409, "Incident has already been closed")
+    incident.corrective_action = payload.corrective_action
+    incident.is_closed = True
+    db.commit()
+    db.refresh(incident)
+    return incident
 
 
 @router.post("/documents", status_code=201)
@@ -287,6 +348,8 @@ def list_notices(db: Session = Depends(get_db), user: User = Depends(get_current
     if user.role == UserRole.APPLICANT:
         raise HTTPException(403, "Staff access required")
     query = db.query(Notice).filter(Notice.is_active.is_(True))
+    if user.role not in {UserRole.OWNER, UserRole.HR, UserRole.ADMIN}:
+        query = query.filter(Notice.audience.in_(["all", user.role.value]))
     return query.order_by(Notice.created_at.desc()).limit(50).all()
 
 

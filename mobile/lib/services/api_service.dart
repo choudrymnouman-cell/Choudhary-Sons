@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 part 'fastapi_service.dart';
 part 'recruitment_http.dart';
 part 'owner_http.dart';
+part 'workspace_http.dart';
 
 const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 

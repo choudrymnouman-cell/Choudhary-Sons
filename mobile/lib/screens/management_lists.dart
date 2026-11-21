@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import 'admin_create_forms.dart';
+import 'staff_profile_form.dart';
 
 class ManagementListScreen extends StatefulWidget {
   const ManagementListScreen({super.key, required this.session, required this.type});
@@ -58,7 +59,7 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
       if (item['start_date'] != null) '${item['start_date']} → ${item['end_date'] ?? ''}',
       if (item['status'] != null) 'Status: ${item['status']}',
       if (item['email'] != null) item['email'].toString(),
-      if (item['net_salary'] != null) 'Net salary: ${item['net_salary']}',
+      if (item['net_salary'] != null) 'Net salary: ${item['net_salary']} · ${item['payment_status']}',
       if (item['contract_value'] != null) 'Contract: ${item['contract_value']}',
     ];
     return fields.take(3).join(' • ');
@@ -71,9 +72,30 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
 
   Future<void> _add() async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => AdminCreateScreen(session: widget.session, type: widget.type)),
+      MaterialPageRoute(builder: (_) => widget.type == 'Employees' && selfHostedWeb ? StaffProfileForm(session: widget.session) : AdminCreateScreen(session: widget.session, type: widget.type)),
     );
     if (changed == true) _refresh();
+  }
+
+  Future<void> _payPayroll(Map<String, dynamic> item) async {
+    final reference = TextEditingController();
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Record salary payment'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Confirm the payment of ${item['net_salary']} has been made. This records payment; it does not transfer money.'),
+        const SizedBox(height: 16), TextField(controller: reference, decoration: const InputDecoration(labelText: 'Bank / cash payment reference')),
+      ]), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () { if (reference.text.trim().isNotEmpty) Navigator.pop(context, true); }, child: const Text('Confirm payment'))],
+    ));
+    final value = reference.text.trim();
+    reference.dispose();
+    if (confirmed != true) return;
+    try {
+      await WorkspaceHttp(widget.session.token).post('/payroll/${item['id']}/pay', {'reference': value});
+      _refresh();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _reviewLeave(int id, String decision) async {
@@ -114,8 +136,8 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
     }
   }
 
-  bool get _canAdd => const {'Projects', 'Employees', 'Payroll', 'Recruitment'}.contains(widget.type);
-  bool get _canEdit => const {'Projects', 'Employees'}.contains(widget.type);
+  bool get _canAdd => widget.type == 'Employees' ? const {'owner','hr','admin'}.contains(widget.session.role) : const {'Projects', 'Payroll', 'Recruitment'}.contains(widget.type);
+  bool get _canEdit => widget.type == 'Employees' ? const {'owner','hr','admin'}.contains(widget.session.role) : widget.type == 'Projects';
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +203,7 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
                                       },
                                       itemBuilder: (_) => [
                                         const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit'), contentPadding: EdgeInsets.zero)),
-                                        if (widget.type == 'Employees' && employeeActive)
+                                        if (widget.type == 'Employees' && employeeActive && widget.session.role == 'owner')
                                           const PopupMenuItem(value: 'deactivate', child: ListTile(leading: Icon(Icons.person_off_outlined), title: Text('Deactivate'), contentPadding: EdgeInsets.zero)),
                                       ],
                                     )
@@ -190,6 +212,8 @@ class _ManagementListScreenState extends State<ManagementListScreen> {
                                 MaterialPageRoute(builder: (_) => RecordDetailScreen(title: _title(item), record: item)),
                               ),
                             ),
+                            if (selfHostedWeb && widget.type == 'Payroll' && item['payment_status'] == 'pending' && const {'owner','accountant'}.contains(widget.session.role))
+                              Padding(padding: const EdgeInsets.all(12), child: FilledButton.icon(onPressed: () => _payPayroll(item), icon: const Icon(Icons.payments_outlined), label: const Text('Record salary payment'))),
                             if (pendingLeave)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
