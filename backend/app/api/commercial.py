@@ -2,13 +2,14 @@ import math
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.approvals import queue_request, required_by_limit
 from app.api.auth import get_current_user
+from app.api.project_access import require_project
 from app.db.session import get_db
 from app.models.commercial import BoqItem, ClientInvoice, Expense, Material, PurchaseOrder, Supplier
 from app.models.core import Project, User, UserRole
@@ -24,9 +25,34 @@ MANAGEMENT_ROLES = {
 }
 
 
-def require_management(user: User = Depends(get_current_user)) -> User:
-    if user.role not in MANAGEMENT_ROLES:
-        raise HTTPException(status_code=403, detail="Management access required")
+def require_management(request: Request, user: User = Depends(get_current_user)) -> User:
+    if user.role == UserRole.OWNER:
+        return user
+    resource = request.url.path.removeprefix("/api/v1/commercial/").split("/")[0]
+    read = request.method == "GET"
+    allowed = {
+        "suppliers": {UserRole.PROCUREMENT, UserRole.STORE, UserRole.ACCOUNTANT},
+        "materials": {UserRole.PROCUREMENT, UserRole.STORE, UserRole.ESTIMATOR},
+        "purchase-orders": {UserRole.PROCUREMENT, UserRole.STORE, UserRole.ACCOUNTANT},
+        "stock-movements": {UserRole.PROCUREMENT, UserRole.STORE},
+        "deliveries": {UserRole.PROCUREMENT, UserRole.STORE, UserRole.ACCOUNTANT},
+        "supplier-payments": {UserRole.ACCOUNTANT},
+        "clients": {UserRole.ACCOUNTANT},
+        "receivables": {UserRole.ACCOUNTANT},
+        "invoices": {UserRole.ACCOUNTANT},
+        "expenses": {UserRole.ACCOUNTANT},
+        "projects": {UserRole.ACCOUNTANT},
+        "boq": {UserRole.ESTIMATOR, UserRole.PROJECT_MANAGER},
+    }.get(resource, set())
+    if not read:
+        allowed = {
+            "suppliers": {UserRole.PROCUREMENT},
+            "materials": {UserRole.PROCUREMENT, UserRole.STORE},
+            "purchase-orders": {UserRole.PROCUREMENT},
+            "deliveries": {UserRole.PROCUREMENT, UserRole.STORE},
+        }.get(resource, allowed)
+    if user.role not in allowed:
+        raise HTTPException(403, "This action belongs to another department")
     return user
 
 
@@ -162,12 +188,14 @@ def create_purchase_order(payload: PurchaseOrderCreate, db: Session = Depends(ge
 
 
 @router.get("/boq/{project_id}")
-def project_boq(project_id: int, db: Session = Depends(get_db), _: User = Depends(require_management)):
+def project_boq(project_id: int, db: Session = Depends(get_db), actor: User = Depends(require_management)):
+    require_project(db, actor, project_id)
     return db.query(BoqItem).filter(BoqItem.project_id == project_id).order_by(BoqItem.id).all()
 
 
 @router.post("/boq")
-def create_boq_item(payload: BoqItemCreate, db: Session = Depends(get_db), _: User = Depends(require_management)):
+def create_boq_item(payload: BoqItemCreate, db: Session = Depends(get_db), actor: User = Depends(require_management)):
+    require_project(db, actor, payload.project_id)
     if not db.get(Project, payload.project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     data = payload.model_dump()
@@ -184,11 +212,12 @@ def update_boq_progress(
     item_id: int,
     payload: BoqProgressUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_management),
+    actor: User = Depends(require_management),
 ):
     item = db.get(BoqItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="BOQ item not found")
+    require_project(db, actor, item.project_id)
     if payload.completed_quantity > float(item.quantity):
         raise HTTPException(status_code=422, detail="Completed quantity exceeds the item quantity")
     item.completed_quantity = payload.completed_quantity

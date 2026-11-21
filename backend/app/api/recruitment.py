@@ -455,7 +455,7 @@ def schedule(application_id: int, payload: InterviewInput, db: Session = Depends
 
 
 @router.post("/hr/applications/{application_id}/hire", status_code=201)
-def hire(application_id: int, payload: HireInput, db: Session = Depends(get_db), _: User = Depends(require_hr)):
+def hire(application_id: int, payload: HireInput, db: Session = Depends(get_db), actor: User = Depends(require_hr)):
     app = application_for(db, application_id, lock=True)
     link = db.get(ApplicantApplication, app.id)
     if link is None:
@@ -470,7 +470,8 @@ def hire(application_id: int, payload: HireInput, db: Session = Depends(get_db),
     change_status(db, app, ApplicationStatus.HIRED)
     employee = Employee(**payload.model_dump(), user_id=applicant.id, cnic=app.cnic)
     db.add(employee)
-    applicant.role = UserRole.EMPLOYEE
+    applicant.role = UserRole.EMPLOYEE if actor.role == UserRole.OWNER else UserRole.PENDING
+    applicant.token_version += 1
     commit_unique(db, "Employee code or account already exists")
     return {"id": employee.id}
 

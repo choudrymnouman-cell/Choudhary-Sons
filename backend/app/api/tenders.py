@@ -14,7 +14,7 @@ from app.models.core import User, UserRole
 from app.models.tender import Tender
 
 router = APIRouter(prefix="/owner/tenders", tags=["tenders"])
-require_owner = require_roles(UserRole.OWNER)
+require_owner = require_roles(UserRole.OWNER, UserRole.ESTIMATOR)
 TenderStatus = Literal["upcoming", "submitted", "won", "lost", "withdrawn"]
 
 

@@ -1,16 +1,19 @@
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, model_validator
+from decimal import Decimal
+from typing import Literal
 from sqlalchemy.orm import Session
 
 from sqlalchemy import select
 
 from app.api.approvals import queue_request
 from app.api.deps import get_current_user, require_roles
+from app.api.project_access import project_query, require_project
 from app.api.recruitment import notify_matching_jobs
 from app.db.session import get_db
-from app.models.core import Employee, Project, ProjectStatus, User, UserRole
+from app.models.core import Employee, Project, ProjectStatus, User, UserRole, UserProjectAssignment
 from app.models.ownership import ApprovalRequest
 from app.models.operations import ApplicationStatus, JobApplication, JobVacancy, LeaveRequest, LeaveStatus, PayrollRecord
 
@@ -37,17 +40,23 @@ class ProjectUpdate(BaseModel):
 
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if user.role == UserRole.APPLICANT:
-        raise HTTPException(403, "Staff access required")
-    return db.query(Project).order_by(Project.id.desc()).all()
+    if user.role not in {UserRole.OWNER, UserRole.ADMIN, UserRole.ACCOUNTANT, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR, UserRole.PROCUREMENT, UserRole.STORE, UserRole.ESTIMATOR, UserRole.EQUIPMENT, UserRole.HR}:
+        raise HTTPException(403, "Project access required")
+    rows = project_query(db.query(Project), Project.id, db, user).order_by(Project.id.desc()).all()
+    if user.role in {UserRole.PROCUREMENT, UserRole.STORE, UserRole.EQUIPMENT, UserRole.SITE_SUPERVISOR, UserRole.HR}:
+        return [{"id": p.id, "name": p.name, "code": p.code, "status": p.status, "site_address": p.site_address} for p in rows]
+    return rows
 
 
 @router.post("/projects")
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+def create_project(payload: ProjectCreate, db: Session = Depends(get_db), actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
     if db.query(Project).filter(Project.code == payload.code).first():
         raise HTTPException(status_code=409, detail="Project code already exists")
     project = Project(**payload.model_dump())
     db.add(project)
+    db.flush()
+    if actor.role == UserRole.PROJECT_MANAGER:
+        db.add(UserProjectAssignment(user_id=actor.id, project_id=project.id))
     db.commit()
     db.refresh(project)
     return project
@@ -55,11 +64,14 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
 
 @router.patch("/projects/{project_id}")
 def update_project(project_id: int, payload: ProjectUpdate, db: Session = Depends(get_db), actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.PROJECT_MANAGER))):
+    require_project(db, actor, project_id)
     project = db.get(Project, project_id, with_for_update=True)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     data = payload.model_dump(exclude_unset=True)
-    if data.get("end_date") and data.get("start_date") and data["end_date"] < data["start_date"]:
+    start = data.get("start_date", project.start_date)
+    end = data.get("end_date", project.end_date)
+    if start and end and end < start:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
     awaiting_signoff = data.get("status") == ProjectStatus.COMPLETED and project.status != ProjectStatus.COMPLETED
     if awaiting_signoff:
@@ -158,6 +170,10 @@ def request_leave(payload: LeaveCreate, db: Session = Depends(get_db), user: Use
         raise HTTPException(status_code=400, detail="Employee profile required")
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=400, detail="End date cannot be before start date")
+    if db.query(LeaveRequest).filter(LeaveRequest.employee_id == employee.id,
+            LeaveRequest.status != LeaveStatus.REJECTED, LeaveRequest.start_date <= payload.end_date,
+            LeaveRequest.end_date >= payload.start_date).first():
+        raise HTTPException(409, "An overlapping leave request already exists")
     leave = LeaveRequest(employee_id=employee.id, **payload.model_dump())
     db.add(leave)
     db.commit()
@@ -180,11 +196,16 @@ def all_leave(db: Session = Depends(get_db), _: User = Depends(require_roles(Use
 
 @router.patch("/leave/{leave_id}/{decision}")
 def review_leave(leave_id: int, decision: str, db: Session = Depends(get_db), user: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR))):
-    leave = db.get(LeaveRequest, leave_id)
+    leave = db.get(LeaveRequest, leave_id, with_for_update=True)
     if not leave:
         raise HTTPException(status_code=404, detail="Leave request not found")
     if decision not in {"approved", "rejected"}:
         raise HTTPException(status_code=400, detail="Decision must be approved or rejected")
+    if leave.status != LeaveStatus.PENDING:
+        raise HTTPException(409, "Leave has already been reviewed")
+    employee = db.get(Employee, leave.employee_id)
+    if employee.user_id == user.id:
+        raise HTTPException(403, "Another manager must review your leave")
     leave.status = LeaveStatus.APPROVED if decision == "approved" else LeaveStatus.REJECTED
     leave.reviewed_by = user.id
     leave.reviewed_at = datetime.utcnow()
@@ -195,14 +216,40 @@ def review_leave(leave_id: int, decision: str, db: Session = Depends(get_db), us
 
 class PayrollCreate(BaseModel):
     employee_id: int
-    period: str
-    basic_salary: float
-    overtime: float = 0
-    allowances: float = 0
-    deductions: float = 0
-    advances: float = 0
-    payment_status: str = "pending"
+    period: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    basic_salary: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    overtime: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    allowances: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    deductions: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    advances: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    payment_status: Literal["pending"] = "pending"
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_net(self):
+        if self.basic_salary + self.overtime + self.allowances < self.deductions + self.advances:
+            raise ValueError("Deductions and advances cannot exceed gross pay")
+        return self
+
+
+class PayrollPayment(BaseModel):
+    reference: str = Field(min_length=1, max_length=160)
+
+
+@router.post("/payroll/{record_id}/pay")
+def pay_payroll(record_id: int, payload: PayrollPayment, db: Session = Depends(get_db),
+                actor: User = Depends(require_roles(UserRole.OWNER, UserRole.ACCOUNTANT))):
+    record = db.get(PayrollRecord, record_id, with_for_update=True)
+    if not record:
+        raise HTTPException(404, "Payroll record not found")
+    if record.payment_status != "pending":
+        raise HTTPException(409, "Payroll has already been paid")
+    record.payment_status = "paid"
+    record.paid_at = datetime.utcnow()
+    record.notes = (record.notes or "") + f"\nPayment reference: {payload.reference.strip()} (recorded by {actor.id})"
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 @router.post("/payroll")

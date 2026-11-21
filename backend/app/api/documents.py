@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
+from app.api.project_access import require_project
 from app.core.config import settings
 from app.core.supabase_storage import SupabaseStorageError, create_signed_url, upload_bytes
 from app.models.core import Employee, Project, User, UserRole
@@ -45,6 +46,7 @@ async def upload_document_to_supabase(
     if project_id is None and employee_id is None:
         raise HTTPException(status_code=400, detail="Attach the document to a project or employee")
 
+    require_project(db, user, project_id)
     original_name = Path(file.filename or "upload").name
     extension = Path(original_name).suffix.lower()
     if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
@@ -83,9 +85,13 @@ async def upload_document_to_supabase(
 def download_local_document(
     document_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+    user: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
 ):
     document = db.get(CompanyDocument, document_id)
+    if document:
+        require_project(db, user, document.project_id)
+    if document and user.role != UserRole.OWNER and document.uploaded_by != user.id:
+        raise HTTPException(404, "Document not found")
     if document is None or not document.file_url.startswith("/uploads/"):
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -105,9 +111,13 @@ def download_local_document(
 def document_download_url(
     document_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
+    user: User = Depends(require_roles(*DOCUMENT_MANAGEMENT)),
 ):
     document = db.get(CompanyDocument, document_id)
+    if document:
+        require_project(db, user, document.project_id)
+    if document and user.role != UserRole.OWNER and document.uploaded_by != user.id:
+        raise HTTPException(404, "Document not found")
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     if document.file_url.startswith("/uploads/"):

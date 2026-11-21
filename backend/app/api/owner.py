@@ -4,20 +4,20 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
 from app.core.security import hash_password
 from app.models.commercial import ClientInvoice, Expense
-from app.models.core import Project, User, UserRole
+from app.models.core import Project, User, UserRole, UserProjectAssignment
 from app.models.ownership import ActivityEvent
 from app.models.trade import InvoiceReceipt, SupplierPayment
 
 router = APIRouter(prefix="/owner", tags=["owner"])
 require_owner = require_roles(UserRole.OWNER)
-StaffRole = Literal["owner", "admin", "hr", "accountant", "project_manager", "site_supervisor", "employee"]
+StaffRole = Literal["owner", "admin", "hr", "accountant", "project_manager", "site_supervisor", "employee", "pending", "applicant", "procurement", "store", "estimator", "equipment"]
 
 
 class AccountCreate(BaseModel):
@@ -25,12 +25,14 @@ class AccountCreate(BaseModel):
     email: EmailStr
     role: StaffRole = "employee"
     password: str = Field(min_length=12, max_length=72)
+    project_ids: list[int] = Field(default_factory=list, max_length=500)
 
 
 class AccountUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=150)
     role: StaffRole | None = None
     is_active: bool | None = None
+    project_ids: list[int] | None = Field(default=None, max_length=500)
     password: str | None = Field(default=None, min_length=12, max_length=72)
 
 
@@ -40,19 +42,29 @@ def password_digest(value: str) -> str:
     return hash_password(value)
 
 
-def account_public(user: User) -> dict:
+def account_public(user: User, db: Session) -> dict:
     return {
         "id": user.id,
         "full_name": user.full_name,
         "email": user.email,
         "role": user.role.value,
         "is_active": user.is_active,
+        "project_ids": list(db.scalars(select(UserProjectAssignment.project_id).where(UserProjectAssignment.user_id == user.id))),
     }
+
+
+def assign_projects(db: Session, account_id: int, project_ids: list[int]):
+    unique = set(project_ids)
+    existing = set(db.scalars(select(Project.id).where(Project.id.in_(unique))))
+    if existing != unique:
+        raise HTTPException(422, "One or more projects no longer exist")
+    db.execute(delete(UserProjectAssignment).where(UserProjectAssignment.user_id == account_id))
+    db.add_all(UserProjectAssignment(user_id=account_id, project_id=pid) for pid in sorted(unique))
 
 
 @router.get("/accounts")
 def accounts(db: Session = Depends(get_db), _: User = Depends(require_owner)):
-    return [account_public(row) for row in db.scalars(select(User).order_by(User.id))]
+    return [account_public(row, db) for row in db.scalars(select(User).order_by(User.id))]
 
 
 @router.post("/accounts", status_code=201)
@@ -65,13 +77,15 @@ def create_account(payload: AccountCreate, db: Session = Depends(get_db), _: Use
         raise HTTPException(409, "Email already exists")
     account = User(full_name=name, email=email, role=UserRole(payload.role), password_hash=password_digest(payload.password))
     db.add(account)
+    db.flush()
+    assign_projects(db, account.id, payload.project_ids)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Email already exists") from exc
     db.refresh(account)
-    return account_public(account)
+    return account_public(account, db)
 
 
 @router.patch("/accounts/{account_id}")
@@ -105,11 +119,14 @@ def update_account(
     if payload.password is not None:
         account.password_hash = password_digest(payload.password)
         revoke = True
+    if payload.project_ids is not None:
+        assign_projects(db, account.id, payload.project_ids)
+        revoke = True
     if revoke:
         account.token_version += 1
     db.commit()
     db.refresh(account)
-    return account_public(account)
+    return account_public(account, db)
 
 
 @router.get("/activity")

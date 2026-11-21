@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import 'tender_register.dart';
+import 'department_home.dart' show departmentNames;
 
 class OwnerConsole extends StatefulWidget {
   const OwnerConsole({super.key, required this.session});
@@ -20,6 +21,8 @@ class _OwnerConsoleState extends State<OwnerConsole> {
   late Future<List<Map<String, dynamic>>> events = api.activity();
   late Future<List<Map<String, dynamic>>> approvals = api.approvals();
   final deciding = <int>{};
+  String accountSearch = "";
+  bool pendingOnly = false;
 
   void refresh() {
     setState(() {
@@ -108,11 +111,16 @@ class _OwnerConsoleState extends State<OwnerConsole> {
               icon: const Icon(Icons.person_add_outlined),
               label: const Text('Create account'),
             )),
-            for (final account in rows)
+            const SizedBox(height:16),
+            const Text('New registrations wait here until you assign a role. Role changes sign the user out immediately.'),
+            const SizedBox(height:12),
+            TextField(decoration: const InputDecoration(labelText:'Find a person',prefixIcon:Icon(Icons.search)),onChanged:(v)=>setState(()=>accountSearch=v.toLowerCase())),
+            SwitchListTile(title:Text('Awaiting assignment (${rows.where((a)=>a['role']=='pending').length})'),value:pendingOnly,onChanged:(v)=>setState(()=>pendingOnly=v)),
+            for (final account in rows.where((a)=>(!pendingOnly||a['role']=='pending') && '${a['full_name']} ${a['email']}'.toLowerCase().contains(accountSearch)))
               ListTile(
                 title: Text(account['full_name'].toString()),
-                subtitle: Text('${account['email']} · ${account['role']}'),
-                trailing: Text(account['is_active'] == true ? 'Active' : 'Inactive'),
+                subtitle: Text("${account['email']} · ${departmentNames[account['role']] ?? account['role']}"),
+                trailing: Text(account['role']=='pending' ? 'Assign role →' : account['is_active'] == true ? 'Active' : 'Inactive'),
                 onTap: () => editAccount(account),
               ),
           ],
@@ -231,7 +239,7 @@ class _AccountDialog extends StatefulWidget {
 }
 
 class _AccountDialogState extends State<_AccountDialog> {
-  static const roles = ['owner', 'admin', 'hr', 'accountant', 'project_manager', 'site_supervisor', 'employee'];
+  static const roles = ['owner', 'admin', 'hr', 'accountant', 'project_manager', 'site_supervisor', 'employee', 'procurement', 'store', 'estimator', 'equipment', 'pending', 'applicant'];
   late final name = TextEditingController(text: widget.account?['full_name']?.toString());
   late final email = TextEditingController(text: widget.account?['email']?.toString());
   final password = TextEditingController();
@@ -240,6 +248,8 @@ class _AccountDialogState extends State<_AccountDialog> {
   late bool active = widget.account?['is_active'] != false;
   bool saving = false;
   String? error;
+  late final projects = widget.api.projects();
+  late final selectedProjects = <int>{...((widget.account?['project_ids'] as List?) ?? []).cast<int>()};
 
   @override
   void dispose() {
@@ -266,6 +276,7 @@ class _AccountDialogState extends State<_AccountDialog> {
         if (!editing) 'email': email.text.trim(),
         if (!editing || role != originalRole) 'role': role,
         if (editing) 'is_active': active,
+        'project_ids': selectedProjects.toList(),
         if (password.text.isNotEmpty) 'password': password.text,
       }, id: widget.account?['id'] as int?);
       if (mounted) Navigator.pop(context, true);
@@ -288,10 +299,30 @@ class _AccountDialogState extends State<_AccountDialog> {
           TextField(controller: email, enabled: !editing, decoration: const InputDecoration(labelText: 'Email')),
           DropdownButtonFormField<String>(
             initialValue: role,
-            decoration: const InputDecoration(labelText: 'Role'),
-            items: [for (final value in options) DropdownMenuItem(value: value, child: Text(value))],
+            decoration: const InputDecoration(labelText: 'Department / role', helperText: 'Only the assigned department will be available.'),
+            items: [for (final value in options) DropdownMenuItem(value: value, child: Text(departmentNames[value] ?? value))],
             onChanged: saving || self ? null : (value) => setState(() => role = value!),
           ),
+          if (role == 'project_manager' || role == 'site_supervisor')
+            FutureBuilder<List<Map<String, dynamic>>>(future: projects, builder: (context, snapshot) {
+              if (snapshot.hasError) return const Text('Could not load projects. Close and retry.');
+              if (!snapshot.hasData) return const LinearProgressIndicator();
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const SizedBox(height: 16),
+                const Text('Assigned projects'),
+                const Text('No selection means no access to existing projects.'),
+                for (final project in snapshot.data!) CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${project['name']}'),
+                  subtitle: Text('${project['code']}'),
+                  value: selectedProjects.contains(project['id']),
+                  onChanged: saving ? null : (checked) => setState(() {
+                    if (checked == true) { selectedProjects.add(project['id'] as int); }
+                    else { selectedProjects.remove(project['id']); }
+                  }),
+                ),
+              ]);
+            }),
           if (editing) SwitchListTile(title: const Text('Active account'), value: active,
             onChanged: saving || self ? null : (value) => setState(() => active = value)),
           TextField(controller: password, obscureText: true, enableSuggestions: false, autocorrect: false,

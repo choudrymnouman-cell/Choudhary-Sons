@@ -16,6 +16,11 @@ class UserRole(str, enum.Enum):
     SITE_SUPERVISOR = "site_supervisor"
     EMPLOYEE = "employee"
     APPLICANT = "applicant"
+    PENDING = "pending"
+    PROCUREMENT = "procurement"
+    STORE = "store"
+    ESTIMATOR = "estimator"
+    EQUIPMENT = "equipment"
 
 
 class ProjectStatus(str, enum.Enum):
@@ -48,6 +53,7 @@ class Employee(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     employee_code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     designation: Mapped[str] = mapped_column(String(120))
     department: Mapped[str | None] = mapped_column(String(120), nullable=True)
     joining_date: Mapped[date] = mapped_column(Date)
@@ -96,3 +102,9 @@ class Attendance(Base):
     check_out_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="present")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class UserProjectAssignment(Base):
+    __tablename__ = "user_project_assignments"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)

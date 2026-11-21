@@ -5,6 +5,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_roles
+from app.api.project_access import SCOPED_ROLES, assigned_project_ids
 from app.models.core import Attendance, Employee, User, UserRole
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -81,14 +82,12 @@ def my_attendance(current_user: User = Depends(get_current_user), db: Session = 
 @router.get("")
 def attendance_admin(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR)),
+    user: User = Depends(require_roles(UserRole.OWNER, UserRole.ADMIN, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.SITE_SUPERVISOR)),
 ):
-    rows = db.execute(
-        select(Attendance, Employee, User)
-        .join(Employee, Attendance.employee_id == Employee.id)
-        .join(User, Employee.user_id == User.id)
-        .order_by(Attendance.attendance_date.desc())
-    ).all()
+    query = select(Attendance, Employee, User).join(Employee, Attendance.employee_id == Employee.id).join(User, Employee.user_id == User.id)
+    if user.role in SCOPED_ROLES:
+        query = query.where(Employee.project_id.in_(assigned_project_ids(db, user)))
+    rows = db.execute(query.order_by(Attendance.attendance_date.desc())).all()
     return [
         {
             "attendance_id": a.id,

@@ -16,6 +16,34 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _c = {};
   bool _saving = false;
+  List<Map<String, dynamic>>? _employees;
+  String? _loadError;
+  int? _employeeId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.type == 'Payroll') {
+      ctrl('period').text = DateTime.now().toIso8601String().substring(0, 7);
+      _loadEmployees();
+    }
+  }
+  Future<void> _loadEmployees() async {
+    try {
+      final rows = await _api.employees(widget.session.token);
+      if (mounted) setState(() { _employees = rows.cast<Map<String, dynamic>>().where((e) => e['is_active'] != false).toList(); _loadError = null; });
+    } catch (e) { if (mounted) setState(() => _loadError = '$e'); }
+  }
+  Widget _employeePicker() {
+    if (_loadError != null) return TextButton(onPressed: _loadEmployees, child: const Text('Could not load employees. Retry'));
+    if (_employees == null) return const LinearProgressIndicator();
+    return Padding(padding: const EdgeInsets.only(bottom: 16), child: DropdownButtonFormField<int>(
+      decoration: const InputDecoration(labelText: 'Employee'), isExpanded: true,
+      items: [for (final e in _employees!) DropdownMenuItem(value: e['id'] as int, child: Text('${e['full_name']} · ${e['employee_code']}'))],
+      validator: (v) => v == null ? 'Choose an employee' : null,
+      onChanged: (v) => setState(() { _employeeId = v; ctrl('employee_id').text = '$v'; ctrl('basic_salary').text = '${_employees!.firstWhere((e) => e['id'] == v)['basic_salary']}'; }),
+    ));
+  }
 
   TextEditingController ctrl(String key) => _c.putIfAbsent(key, TextEditingController.new);
 
@@ -32,7 +60,7 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
       case 'Employees':
         return [_field('full_name','Full name'), _field('email','Email'), _field('phone','Phone'), _field('password','Temporary password', secret: true), _field('employee_code','Employee code'), _field('designation','Designation'), _field('department','Department'), _field('joining_date','Joining date (YYYY-MM-DD)'), _field('basic_salary','Basic salary', number: true)];
       case 'Payroll':
-        return [_field('employee_id','Employee ID', number: true), _field('period','Period (YYYY-MM)'), _field('basic_salary','Basic salary', number: true), _field('overtime','Overtime', number: true), _field('allowances','Allowances', number: true), _field('deductions','Deductions', number: true), _field('advances','Advances', number: true), _field('notes','Notes', lines: 2)];
+        return [_employeePicker(), _field('period','Period (YYYY-MM)'), _field('basic_salary','Basic salary', number: true), _field('overtime','Overtime', number: true), _field('allowances','Allowances', number: true), _field('deductions','Deductions', number: true), _field('advances','Advances', number: true), _field('notes','Notes', lines: 2), Card(child: Padding(padding: const EdgeInsets.all(20), child: Text('Net pay: ${(numValue('basic_salary') + numValue('overtime') + numValue('allowances') - numValue('deductions') - numValue('advances')).toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))))];
       case 'Recruitment':
         return [_field('title','Job title'), _field('department','Department'), _field('location','Location'), _field('employment_type','Employment type'), _field('salary_min','Minimum salary', number: true), _field('salary_max','Maximum salary', number: true), _field('description','Job description', lines: 4)];
       default:
@@ -45,6 +73,7 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: ctrl(key),
+        onChanged: (_) { if (widget.type == 'Payroll') setState(() {}); },
         obscureText: secret,
         maxLines: secret ? 1 : lines,
         keyboardType: number ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
@@ -52,6 +81,9 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
         validator: (value) {
           const required = {'code','name','full_name','email','password','employee_code','designation','joining_date','employee_id','period','basic_salary','title','description'};
           if (required.contains(key) && (value == null || value.trim().isEmpty)) return '$label is required';
+          if (number && (value ?? '').isNotEmpty && (double.tryParse(value!) == null || !double.parse(value).isFinite || double.parse(value) < 0)) return 'Enter a valid non-negative amount';
+          if (key == 'period' && !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(value ?? '')) return 'Use YYYY-MM';
+          if (key == 'password' && (value ?? '').length < 12) return 'Use at least 12 characters';
           return null;
         },
       ),
@@ -63,6 +95,7 @@ class _AdminCreateScreenState extends State<AdminCreateScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.type == 'Payroll' && _employeeId == null) return;
     setState(() => _saving = true);
     try {
       final token = widget.session.token;

@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 part 'fastapi_service.dart';
 part 'recruitment_http.dart';
 part 'owner_http.dart';
+part 'workspace_http.dart';
 
 const selfHostedWeb = bool.fromEnvironment('SELF_HOSTED_WEB');
 
@@ -20,7 +21,7 @@ class AuthSession {
 
   const AuthSession({required this.token, required this.userId, required this.fullName, required this.email, required this.role});
 
-  bool get isManagement => const {'owner', 'admin', 'hr', 'accountant', 'project_manager', 'site_supervisor'}.contains(role);
+  bool get isManagement => const {'owner', 'admin', 'hr', 'accountant', 'project_manager', 'site_supervisor', 'procurement', 'store', 'estimator', 'equipment'}.contains(role);
 }
 
 class ApiService {

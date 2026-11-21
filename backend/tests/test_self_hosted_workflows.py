@@ -161,7 +161,8 @@ def test_applicant_and_hr_workflow(session):
     hire = {"employee_code": f"E-{tag}", "designation": "Engineer"}
     employee = create(client, f"{base}/hire", hr, hire)
     assert create(client, f"{base}/hire", hr, hire) == employee
-    assert client.get(f"{API}/auth/me", headers=applicant).json()["role"] == "employee"
+    assert client.get(f"{API}/auth/me", headers=applicant).status_code == 401
+    assert client.get(f"{API}/auth/me", headers=login(client, email)).json()["role"] == "employee"
 
 
 def test_owner_accounts_invalidate_old_sessions_and_record_activity(session):

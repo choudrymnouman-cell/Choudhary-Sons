@@ -43,7 +43,7 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
         'Invoice' => await Future.wait([_api.projects(token), if (selfHostedWeb) _api.clients(token)]),
         'Purchase Order' => await Future.wait([_api.projects(token), _api.suppliers(token)]),
         'Fuel Log' || 'Maintenance' => await Future.wait([_api.projects(token), _api.assets(token)]),
-        'Expense' || 'Asset' || 'Site Report' || 'Safety Incident' => [await _api.projects(token)],
+        'Expense' || 'Asset' || 'Site Report' || 'Safety Incident' || 'Safety Inspection' => [await _api.projects(token)],
         _ => <List<dynamic>>[],
       };
       if (!mounted) return;
@@ -258,10 +258,12 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
           _field('delays_issues', 'Delays / issues', lines: 2, optional: true),
           _field('tomorrow_plan', 'Tomorrow plan', lines: 2, optional: true),
         ];
+      case 'Safety Inspection':
+        return [_projectDropdown(required: true), _field('inspector', 'Inspector'), _field('score', 'Inspection score (0–100)', number: true, optional: true), _field('findings', 'Findings / checklist results', lines: 4), _field('action_required', 'Required corrective actions', lines: 3, optional: true)];
       case 'Safety Incident':
         return [
           _projectDropdown(),
-          _field('severity', 'Severity'),
+          DropdownButtonFormField<String>(initialValue: 'minor', decoration: const InputDecoration(labelText: 'Severity'), items: const ['minor','moderate','major','critical'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (v) => ctrl('severity').text = v!),
           _field('title', 'Incident title'),
           _field('description', 'Description', lines: 3),
           _field('injured_person', 'Injured person', optional: true),
@@ -327,8 +329,11 @@ class _OperationsCreateScreenState extends State<OperationsCreateScreen> {
         case 'Site Report':
           await _api.createSiteReport(t, {'project_id': _projectId, 'weather': _text('weather'), 'workforce_count': _num('workforce_count').toInt(), 'work_completed': _text('work_completed'), 'materials_used': _text('materials_used'), 'equipment_used': _text('equipment_used'), 'delays_issues': _text('delays_issues'), 'tomorrow_plan': _text('tomorrow_plan')});
           break;
+        case 'Safety Inspection':
+          await WorkspaceHttp(t).post('/safety/inspections', {'project_id':_projectId, 'inspector':_text('inspector'), 'score':_text('score') == null ? null : _num('score'), 'findings':_text('findings'), 'action_required':_text('action_required')});
+          break;
         case 'Safety Incident':
-          await _api.createSafetyIncident(t, {'project_id': _projectId, 'severity': _text('severity'), 'title': _text('title'), 'description': _text('description'), 'injured_person': _text('injured_person'), 'corrective_action': _text('corrective_action')});
+          await _api.createSafetyIncident(t, {'project_id': _projectId, 'severity': _text('severity') ?? 'minor', 'title': _text('title'), 'description': _text('description'), 'injured_person': _text('injured_person'), 'corrective_action': _text('corrective_action')});
           break;
         case 'Notice':
           await _api.createNotice(t, {'title': _text('title'), 'body': _text('body'), 'audience': _text('audience')});
